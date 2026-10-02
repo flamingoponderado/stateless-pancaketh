@@ -6,6 +6,17 @@ defaultTargets = ["Guest"]
 # together with `Flapjack.PanValueFfiFuel` upstreams what used to live here as
 # `Guest/StepCalculus.lean`. Bump deliberately (and re-check lean-toolchain
 # compatibility) rather than tracking main unpinned.
+#
+# flapjack main (b48c607 at the time of writing) cannot be used here yet. It
+# requires mathlib v4.33.0, so lean-toolchain would have to drop to v4.33.0 and
+# `.lake/packages` grows by about 8 GB. It renamed `Flapjack.Language` to
+# `Flapjack.Pancake.PanLang`, deleted `Flapjack.RiscV.PanSemantics`
+# (`guestPrimitiveHandler` in Guest/Model.lean needs its own definition), and
+# gave the stepped semantics an explicit `error` result, which breaks the proofs
+# in Guest/Termination.lean and, behind it, FunctionTermination.lean and
+# StepBound.lean. The compiler output is the same for the accelerated guest and
+# differs by one nop and the jump offsets after it for the software guest. The
+# `flapjack` submodule is bumped to main separately because nothing builds from it.
 [[require]]
 name = "flapjack"
 git = "https://github.com/flamingoponderado/flapjack"
