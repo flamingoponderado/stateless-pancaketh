@@ -69,6 +69,7 @@ run_check "build guest" "$ROOT/tools/build_guest.sh"
 # specifications must agree with reference values.
 run_check "lean: lake build Guest" lake build Guest
 run_check "lean: accel-ffi-check" lake exe accel-ffi-check
+run_check "lean: input-arena-check" lake exe input-arena-check
 run_check "accelerator foreign-call smoke (ziskemu)" python3 "$ROOT/tools/accel-ffi-smoke.py"
 
 run_unit_tests() {

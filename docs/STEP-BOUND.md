@@ -133,10 +133,18 @@ one — the over-approximation claim does not hold even for runs that finish.
 
 The heap is `HEAP_END − HEAP_BASE` = 2,952,790,016 − 2,701,131,776 =
 **251,658,240 bytes (240 MiB)**, and `maxInputBytes` is **1,073,741,808 bytes**
-— 4.27× the whole heap. `input_blob` (`guest/src/lib/mem.pnk:304`) reads the
-host's length word and immediately does `alloc(len + 8)` with no check, so
+— 4.27× the whole heap. `input_blob` (`guest/src/lib/mem.pnk`) reads the
+host's length word, rejects a length above `MAX_INPUT_LEN` (= `maxInputBytes`)
+with trap code 8, and otherwise goes straight to `alloc(len + 8)`, so
 
 > every input longer than 251,658,232 bytes traps in `input_blob`.
+
+(The `MAX_INPUT_LEN` guard is about a length the host contract cannot back at
+all, not about the heap: it keeps `len + 8` from wrapping into a small
+allocation that `alloc` would accept, after which the copy loop would walk off
+the input region. Lengths between the heap size and `maxInputBytes` still trap
+in `alloc` with code 1, as above. `lake exe input-arena-check` exercises both
+sides of the boundary.)
 
 Smaller inputs do it too, through amplification. `main` calls
 `htr_new_payload_request` unconditionally once the input decodes, and that

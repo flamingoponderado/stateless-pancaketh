@@ -3,6 +3,12 @@
 #define INPUT_ADDR       1073741824   /* 0x40000000: [8B zero meta][8B LE len][blob] */
 #define INPUT_LEN_ADDR   1073741832   /* 0x40000008 */
 #define INPUT_DATA_ADDR  1073741840   /* 0x40000010 */
+/* Largest declared blob length the host contract can actually back: ZisK's
+   input region (MAX_INPUT_SIZE = 0x40000000, 1 GiB, core/src/mem.rs -- the
+   "128M" comment there is stale) minus the 16 bytes of framing above.
+   input_blob() rejects anything larger before allocating or reading payload,
+   so len + 8 cannot wrap. */
+#define MAX_INPUT_LEN    1073741808   /* 0x40000000 - 16 */
 /* ZisK >=1.1.0-alpha reserves RAM_ADDR..+4MB as a guarded stack region (see
    core/src/mem.rs upstream), pushing OUTPUT_ADDR from RAM_ADDR+0x10000
    (0.18.0's address) up by 0x400000. tools/spike/spike_run.cc (a fork of

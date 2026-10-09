@@ -627,6 +627,10 @@ def guestFn_input_blob : Decl (BitVec 64) :=
         (Prog.dec "len" Shape.one (Exp.const (BitVec.ofNat 64 0))
           (Prog.seq
             (Prog.shMemLoad OpSize.opW VarKind.local "len" (Exp.const (BitVec.ofNat 64 1073741832)))
+            (Prog.seq
+            (Prog.ite (Exp.cmp Cmp.lower (Exp.const (BitVec.ofNat 64 1073741808)) (Exp.var VarKind.local "len"))
+              (Prog.call (some (none, none)) "trap_with" [(Exp.const (BitVec.ofNat 64 8))])
+              Prog.skip)
             (Prog.decCall "p" Shape.one "alloc" [(Exp.op BinOp.add [(Exp.var VarKind.local "len"), (Exp.const (BitVec.ofNat 64 8))])]
               (Prog.dec "i" Shape.one (Exp.const (BitVec.ofNat 64 0))
                 (Prog.dec "w" Shape.one (Exp.const (BitVec.ofNat 64 0))
@@ -637,7 +641,7 @@ def guestFn_input_blob : Decl (BitVec 64) :=
                         (Prog.seq
                         (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.local "p"), (Exp.var VarKind.local "i")]) (Exp.var VarKind.local "w"))
                         (Prog.assign VarKind.local "i" (Exp.op BinOp.add [(Exp.var VarKind.local "i"), (Exp.const (BitVec.ofNat 64 8))])))))
-                    (Prog.return (Exp.rStruct [(Exp.var VarKind.local "p"), (Exp.var VarKind.local "len")]))))))))
+                    (Prog.return (Exp.rStruct [(Exp.var VarKind.local "p"), (Exp.var VarKind.local "len")])))))))))
       returnShape := (Shape.comb [Shape.one, Shape.one]) }
 
 def guestFn_output_write : Decl (BitVec 64) :=
