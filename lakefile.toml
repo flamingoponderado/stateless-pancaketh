@@ -53,6 +53,12 @@ root = "Tools.FrameBound"
 name = "input-decode-check"
 root = "Tools.InputDecodeCheck"
 
+# `lake exe input-arena-check` checks that the guest rejects declared input
+# lengths that cannot fit ZisK's input region (see Tools/InputArenaCheck.lean).
+[[lean_exe]]
+name = "input-arena-check"
+root = "Tools.InputArenaCheck"
+
 # `lake exe opcode-census` classifies every opcode handler as charging gas up
 # front, ending its frame, or needing its branches examined (see Tools/OpcodeCensus.lean).
 [[lean_exe]]

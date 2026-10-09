@@ -3,7 +3,9 @@
 **Goal.** For every block whose declared gas limit is at most 200M, no OOM trap
 may fire, even on a maliciously crafted block. The OOM traps are `trap_with` codes
 1, 6 and 7 (allocator exhaustion, `guest/src/lib/mem.pnk`) and codes 4 and 5
-(journal full, `guest/src/state.pnk`; treated as OOM, see below). This needs two
+(journal full, `guest/src/state.pnk`; treated as OOM, see below). Code 8
+(oversized declared input length) is not an OOM trap: it rejects a length the
+host contract cannot back, before any allocation. This needs two
 properties:
 
 1. **Ordering.** Gas is charged *before* any allocation whose size or count
@@ -88,6 +90,7 @@ traps for a non-OOM reason. So the guest's traps split as follows
 | 4, 5 | `jset`, `jdel` (`state.pnk`) | fixed-size journal full | OOM (treated as OOM; made unreachable at 200M gas, see [JOURNAL-BOUND.md](JOURNAL-BOUND.md)) |
 | 2 | `lib/arith.pnk` | division by zero | non-OOM |
 | 3 | `header.pnk` | base-fee arithmetic overflow | non-OOM |
+| 8 | `input_blob` (`lib/mem.pnk`) | declared input length above `MAX_INPUT_LEN` (ZisK's input region minus the 16-byte framing) | non-OOM |
 
 An OOM trap hands the submission a free pass on that block, so it must be unreachable
 for blocks at or below 200M gas; and a change here must not turn a non-OOM trap into

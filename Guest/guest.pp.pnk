@@ -272,6 +272,9 @@ fun 1 st_be64(1 p, 1 v) {
 fun {1,1} input_blob() {
   var len = 0;
   !ldw len, 1073741832;
+  if len >+ 1073741808 {
+    trap_with(8);
+  }
   var p = alloc(len + 8);
   var i = 0;
   var w = 0;
