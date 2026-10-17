@@ -77,6 +77,12 @@ run_unit_tests() {
     env SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
     "$ROOT/guest/test/t_globals.pnk" "$UNIT_INPUT" \
     "struct.pack('<QQQQQQQQ', 0xa1000000, 0xa1000000, 0xa1000040, 1234, 5678, 0xa1000040, 0xa10f4280, 1234)"
+  run_check "unit t_htab" \
+    env SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
+    "$ROOT/guest/test/t_htab.pnk" "$UNIT_INPUT" @guest/test/exp_htab.py
+  run_check "unit t_htab_ops" \
+    env SPIKE_OUTPUT_LEN=131072 "$ROOT/tools/unit.py" \
+    "$ROOT/guest/test/t_htab_ops.pnk" "$UNIT_INPUT" @guest/test/exp_htab_ops.py
   run_check "unit t_keccak" \
     env SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
     "$ROOT/guest/test/t_keccak.pnk" "$UNIT_INPUT" \

@@ -1440,303 +1440,276 @@ fun 1 rlp_word_encoded_len(1 w) {
   return 1 + ll;
 }
 fun 1 htab_new(1 key_len, 1 cap) {
-  var 1 t = alloc(72);
+  var 1 t = alloc(88);
   var stride = (key_len + 7) & (0 - 8);
+  var ncap = cap;
+  if ncap <+ 2 {
+    ncap = 2;
+  }
   st t + 0, key_len;
   st t + 8, stride;
   st t + 16, cap;
   st t + 24, 0;
-  var 1 keys = alloc(cap * stride);
+  var 1 keys = alloc((ncap + 1) * stride);
   st t + 32, keys;
-  var 1 vals = alloc(cap * 8);
-  st t + 40, vals;
-  var 1 used = alloc(cap);
-  memzero(used, cap);
-  st t + 48, used;
-  var 1 order = alloc(cap * 8);
-  st t + 56, order;
-  var 1 order_pos = alloc(cap * 8);
-  st t + 64, order_pos;
+  var 1 nodes = alloc((ncap + 1) * 32);
+  st t + 40, nodes;
+  var 1 order = alloc((ncap + 1) * 8);
+  st t + 48, order;
+  st t + 56, 0;
+  st t + 64, 1;
+  st t + 72, 0;
+  st t + 80, ncap;
   return t;
 }
 fun 1 htab_new_scratch(1 key_len, 1 cap) {
-  var 1 t = scratch_alloc(72);
+  var 1 t = scratch_alloc(88);
   var stride = (key_len + 7) & (0 - 8);
+  var ncap = cap;
+  if ncap <+ 2 {
+    ncap = 2;
+  }
   st t + 0, key_len;
   st t + 8, stride;
   st t + 16, cap;
   st t + 24, 0;
-  var 1 keys = scratch_alloc(cap * stride);
+  var 1 keys = scratch_alloc((ncap + 1) * stride);
   st t + 32, keys;
-  var 1 vals = scratch_alloc(cap * 8);
-  st t + 40, vals;
-  var 1 used = scratch_alloc(cap);
-  memzero(used, cap);
-  st t + 48, used;
-  var 1 order = scratch_alloc(cap * 8);
-  st t + 56, order;
-  var 1 order_pos = scratch_alloc(cap * 8);
-  st t + 64, order_pos;
+  var 1 nodes = scratch_alloc((ncap + 1) * 32);
+  st t + 40, nodes;
+  var 1 order = scratch_alloc((ncap + 1) * 8);
+  st t + 48, order;
+  st t + 56, 0;
+  st t + 64, 1;
+  st t + 72, 0;
+  st t + 80, ncap;
   return t;
 }
-fun 1 htab_hash(1 p, 1 key_len) {
-  var h = 14695981039346656037;
-  var 1 w = 0;
-  if (p & 7) == 0 {
-    if key_len == 20 {
-      w = lds 1 p;
-      h = h ^ w;
-      w = lds 1 (p + 8);
-      h = h ^ w;
-      w = ((ld8 (p + 16)) | ((ld8 ((p + 16) + 1)) << 8) | ((ld8 ((p + 16) + 2)) << 16) | ((ld8 ((p + 16) + 3)) << 24));
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-    if key_len == 32 {
-      w = lds 1 p;
-      h = h ^ w;
-      w = lds 1 (p + 8);
-      h = h ^ w;
-      w = lds 1 (p + 16);
-      h = h ^ w;
-      w = lds 1 (p + 24);
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-    if key_len == 52 {
-      w = lds 1 p;
-      h = h ^ w;
-      w = lds 1 (p + 8);
-      h = h ^ w;
-      w = lds 1 (p + 16);
-      h = h ^ w;
-      w = lds 1 (p + 24);
-      h = h ^ w;
-      w = lds 1 (p + 32);
-      h = h ^ w;
-      w = lds 1 (p + 40);
-      h = h ^ w;
-      w = ((ld8 (p + 48)) | ((ld8 ((p + 48) + 1)) << 8) | ((ld8 ((p + 48) + 2)) << 16) | ((ld8 ((p + 48) + 3)) << 24));
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-  } else {
-    if key_len == 20 {
-      w = (((ld8 (p)) | ((ld8 ((p) + 1)) << 8) | ((ld8 ((p) + 2)) << 16) | ((ld8 ((p) + 3)) << 24)) | (((ld8 ((p) + 4)) | ((ld8 (((p) + 4) + 1)) << 8) | ((ld8 (((p) + 4) + 2)) << 16) | ((ld8 (((p) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 8)) | ((ld8 ((p + 8) + 1)) << 8) | ((ld8 ((p + 8) + 2)) << 16) | ((ld8 ((p + 8) + 3)) << 24)) | (((ld8 ((p + 8) + 4)) | ((ld8 (((p + 8) + 4) + 1)) << 8) | ((ld8 (((p + 8) + 4) + 2)) << 16) | ((ld8 (((p + 8) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = ((ld8 (p + 16)) | ((ld8 ((p + 16) + 1)) << 8) | ((ld8 ((p + 16) + 2)) << 16) | ((ld8 ((p + 16) + 3)) << 24));
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-    if key_len == 32 {
-      w = (((ld8 (p)) | ((ld8 ((p) + 1)) << 8) | ((ld8 ((p) + 2)) << 16) | ((ld8 ((p) + 3)) << 24)) | (((ld8 ((p) + 4)) | ((ld8 (((p) + 4) + 1)) << 8) | ((ld8 (((p) + 4) + 2)) << 16) | ((ld8 (((p) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 8)) | ((ld8 ((p + 8) + 1)) << 8) | ((ld8 ((p + 8) + 2)) << 16) | ((ld8 ((p + 8) + 3)) << 24)) | (((ld8 ((p + 8) + 4)) | ((ld8 (((p + 8) + 4) + 1)) << 8) | ((ld8 (((p + 8) + 4) + 2)) << 16) | ((ld8 (((p + 8) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 16)) | ((ld8 ((p + 16) + 1)) << 8) | ((ld8 ((p + 16) + 2)) << 16) | ((ld8 ((p + 16) + 3)) << 24)) | (((ld8 ((p + 16) + 4)) | ((ld8 (((p + 16) + 4) + 1)) << 8) | ((ld8 (((p + 16) + 4) + 2)) << 16) | ((ld8 (((p + 16) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 24)) | ((ld8 ((p + 24) + 1)) << 8) | ((ld8 ((p + 24) + 2)) << 16) | ((ld8 ((p + 24) + 3)) << 24)) | (((ld8 ((p + 24) + 4)) | ((ld8 (((p + 24) + 4) + 1)) << 8) | ((ld8 (((p + 24) + 4) + 2)) << 16) | ((ld8 (((p + 24) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-    if key_len == 52 {
-      w = (((ld8 (p)) | ((ld8 ((p) + 1)) << 8) | ((ld8 ((p) + 2)) << 16) | ((ld8 ((p) + 3)) << 24)) | (((ld8 ((p) + 4)) | ((ld8 (((p) + 4) + 1)) << 8) | ((ld8 (((p) + 4) + 2)) << 16) | ((ld8 (((p) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 8)) | ((ld8 ((p + 8) + 1)) << 8) | ((ld8 ((p + 8) + 2)) << 16) | ((ld8 ((p + 8) + 3)) << 24)) | (((ld8 ((p + 8) + 4)) | ((ld8 (((p + 8) + 4) + 1)) << 8) | ((ld8 (((p + 8) + 4) + 2)) << 16) | ((ld8 (((p + 8) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 16)) | ((ld8 ((p + 16) + 1)) << 8) | ((ld8 ((p + 16) + 2)) << 16) | ((ld8 ((p + 16) + 3)) << 24)) | (((ld8 ((p + 16) + 4)) | ((ld8 (((p + 16) + 4) + 1)) << 8) | ((ld8 (((p + 16) + 4) + 2)) << 16) | ((ld8 (((p + 16) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 24)) | ((ld8 ((p + 24) + 1)) << 8) | ((ld8 ((p + 24) + 2)) << 16) | ((ld8 ((p + 24) + 3)) << 24)) | (((ld8 ((p + 24) + 4)) | ((ld8 (((p + 24) + 4) + 1)) << 8) | ((ld8 (((p + 24) + 4) + 2)) << 16) | ((ld8 (((p + 24) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 32)) | ((ld8 ((p + 32) + 1)) << 8) | ((ld8 ((p + 32) + 2)) << 16) | ((ld8 ((p + 32) + 3)) << 24)) | (((ld8 ((p + 32) + 4)) | ((ld8 (((p + 32) + 4) + 1)) << 8) | ((ld8 (((p + 32) + 4) + 2)) << 16) | ((ld8 (((p + 32) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = (((ld8 (p + 40)) | ((ld8 ((p + 40) + 1)) << 8) | ((ld8 ((p + 40) + 2)) << 16) | ((ld8 ((p + 40) + 3)) << 24)) | (((ld8 ((p + 40) + 4)) | ((ld8 (((p + 40) + 4) + 1)) << 8) | ((ld8 (((p + 40) + 4) + 2)) << 16) | ((ld8 (((p + 40) + 4) + 3)) << 24)) << 32));
-      h = h ^ w;
-      w = ((ld8 (p + 48)) | ((ld8 ((p + 48) + 1)) << 8) | ((ld8 ((p + 48) + 2)) << 16) | ((ld8 ((p + 48) + 3)) << 24));
-      h = h ^ w;
-      h = h ^ (h >>> 32);
-      h = h * 1099511628211;
-      return h ^ (h >>> 29);
-    }
-  }
+fun 1 htab_first_diff(1 a, 1 b, 1 key_len) {
   var i = 0;
-  while i + 8 <=+ key_len {
-    w = (((ld8 (p + i)) | ((ld8 ((p + i) + 1)) << 8) | ((ld8 ((p + i) + 2)) << 16) | ((ld8 ((p + i) + 3)) << 24)) | (((ld8 ((p + i) + 4)) | ((ld8 (((p + i) + 4) + 1)) << 8) | ((ld8 (((p + i) + 4) + 2)) << 16) | ((ld8 (((p + i) + 4) + 3)) << 24)) << 32));
-    h = h ^ w;
-    i = i + 8;
-  }
   while i <+ key_len {
-    h = h ^ (ld8 (p + i));
+    var x = (ld8 (a + i)) ^ (ld8 (b + i));
+    if x != 0 {
+      var j = 0;
+      while j < 8 {
+        if ((x >>> (7 - j)) & 1) != 0 {
+          return i * 8 + j;
+        }
+        j = j + 1;
+      }
+    }
     i = i + 1;
   }
-  h = h ^ (h >>> 32);
-  h = h * 1099511628211;
-  return h ^ (h >>> 29);
+  return key_len * 8;
 }
-fun 1 htab_find_slot(1 t, 1 key) {
-  var cap = lds 1 (t + 16);
-  var klen = lds 1 (t + 0);
-  var stride = lds 1 (t + 8);
-  var keys = lds 1 (t + 32);
-  var used = lds 1 (t + 48);
-  var 1 h = htab_hash(key, klen);
-  var i = h & (cap - 1);
-  while (ld8 (used + i)) != 0 {
-    var 1 eq = memeq(keys + i * stride, key, klen);
-    if eq != 0 {
-      return i;
+fun 1 htab_find_leaf(1 t, 1 key) {
+  var keybits = (lds 1 (t + 0)) * 8;
+  var nodes = lds 1 (t + 40);
+  var n = lds 1 (t + 56);
+  while n != 0 {
+    var b = lds 1 (nodes + n * 32 + 24);
+    if b == keybits {
+      break;
     }
-    i = (i + 1) & (cap - 1);
+    if (((ld8 ((key) + ((b) >>> 3))) >>> (7 - ((b) & 7))) & 1) == 0 {
+      n = lds 1 (nodes + n * 32 + 8);
+    } else {
+      n = lds 1 (nodes + n * 32 + 16);
+    }
   }
-  return cap;
+  return n;
 }
 fun {1,1} htab_get(1 t, 1 key) {
-  var 1 i = htab_find_slot(t, key);
-  if i == (lds 1 (t + 16)) {
+  var 1 leaf = htab_find_leaf(t, key);
+  if leaf == 0 {
     return <0, 0>;
   }
-  return <1, lds 1 ((lds 1 (t + 40)) + i * 8)>;
-}
-fun 1 htab_has(1 t, 1 key) {
-  var 1 i = htab_find_slot(t, key);
-  if i == (lds 1 (t + 16)) {
-    return 0;
-  }
-  return 1;
-}
-fun 1 htab_insert_raw(1 t, 1 key, 1 value) {
-  var cap = lds 1 (t + 16);
   var klen = lds 1 (t + 0);
   var stride = lds 1 (t + 8);
   var keys = lds 1 (t + 32);
-  var used = lds 1 (t + 48);
-  var order = lds 1 (t + 56);
-  var order_pos = lds 1 (t + 64);
-  var 1 h = htab_hash(key, klen);
-  var i = h & (cap - 1);
-  while (ld8 (used + i)) != 0 {
-    i = (i + 1) & (cap - 1);
+  var 1 eq = memeq(keys + leaf * stride, key, klen);
+  if eq == 0 {
+    return <0, 0>;
   }
-  memcpy(keys + i * stride, key, klen);
-  st (lds 1 (t + 40)) + i * 8, value;
-  st8 used + i, 1;
-  var 1 n = lds 1 (t + 24);
-  st order + n * 8, i;
-  st order_pos + i * 8, n;
-  st t + 24, n + 1;
-  return 0;
+  return <1, lds 1 ((lds 1 (t + 40)) + leaf * 32 + 8)>;
 }
-fun 1 htab_grow(1 t) {
-  var cap = lds 1 (t + 16);
+fun 1 htab_has(1 t, 1 key) {
+  var 1 leaf = htab_find_leaf(t, key);
+  if leaf == 0 {
+    return 0;
+  }
+  var klen = lds 1 (t + 0);
   var stride = lds 1 (t + 8);
   var keys = lds 1 (t + 32);
-  var vals = lds 1 (t + 40);
-  var order = lds 1 (t + 56);
-  var 1 nitems = lds 1 (t + 24);
-  var ncap = cap * 2;
-  var 1 nkeys = alloc(ncap * stride);
-  var 1 nvals = alloc(ncap * 8);
-  var 1 nused = alloc(ncap);
-  var 1 norder = alloc(ncap * 8);
-  var 1 norder_pos = alloc(ncap * 8);
-  memzero(nused, ncap);
-  st t + 16, ncap;
-  st t + 32, nkeys;
-  st t + 40, nvals;
-  st t + 48, nused;
-  st t + 56, norder;
-  st t + 64, norder_pos;
-  st t + 24, 0;
-  var 1 k = 0;
-  while k < nitems {
-    var 1 i = lds 1 (order + k * 8);
-    htab_insert_raw(t, keys + i * stride, lds 1 (vals + i * 8));
-    k = k + 1;
+  var 1 eq = memeq(keys + leaf * stride, key, klen);
+  return eq;
+}
+fun 1 htab_new_node(1 t) {
+  var f = lds 1 (t + 72);
+  if f != 0 {
+    var nodes = lds 1 (t + 40);
+    var nf = lds 1 (nodes + f * 32 + 0);
+    st t + 72, nf;
+    return f;
   }
+  var next = lds 1 (t + 64);
+  if next >+ (lds 1 (t + 80)) {
+    htab_grow(t);
+  }
+  var n = lds 1 (t + 64);
+  st t + 64, n + 1;
+  return n;
+}
+fun 1 htab_new_leaf(1 t, 1 key, 1 value) {
+  var n = htab_new_node(t);
+  var klen = lds 1 (t + 0);
+  var stride = lds 1 (t + 8);
+  memcpy((lds 1 (t + 32)) + n * stride, key, klen);
+  var nodes = lds 1 (t + 40);
+  st nodes + n * 32 + 0, 0;
+  st nodes + n * 32 + 8, value;
+  var pos = lds 1 (t + 24);
+  st nodes + n * 32 + 16, pos;
+  st nodes + n * 32 + 24, klen * 8;
+  st (lds 1 (t + 48)) + pos * 8, n;
+  st t + 24, pos + 1;
+  return n;
+}
+fun 1 htab_new_internal(1 t, 1 bit) {
+  var n = htab_new_node(t);
+  var nodes = lds 1 (t + 40);
+  st nodes + n * 32 + 0, 0;
+  st nodes + n * 32 + 8, 0;
+  st nodes + n * 32 + 16, 0;
+  st nodes + n * 32 + 24, bit;
+  return n;
+}
+fun 1 htab_grow(1 t) {
+  var nodecap = lds 1 (t + 80);
+  var ncap = nodecap * 2;
+  var stride = lds 1 (t + 8);
+  var 1 keys = alloc((ncap + 1) * stride);
+  memcpy(keys, lds 1 (t + 32), (nodecap + 1) * stride);
+  st t + 32, keys;
+  var 1 nodes = alloc((ncap + 1) * 32);
+  memcpy(nodes, lds 1 (t + 40), (nodecap + 1) * 32);
+  st t + 40, nodes;
+  var 1 order = alloc((ncap + 1) * 8);
+  memcpy(order, lds 1 (t + 48), (nodecap + 1) * 8);
+  st t + 48, order;
+  st t + 16, (lds 1 (t + 16)) * 2;
+  st t + 80, ncap;
   return 0;
 }
 fun 1 htab_set(1 t, 1 key, 1 value) {
-  var 1 i = htab_find_slot(t, key);
-  if i != (lds 1 (t + 16)) {
-    st (lds 1 (t + 40)) + i * 8, value;
+  var klen = lds 1 (t + 0);
+  var stride = lds 1 (t + 8);
+  var 1 leaf = htab_find_leaf(t, key);
+  var keys = lds 1 (t + 32);
+  if leaf == 0 {
+    var nl = htab_new_leaf(t, key, value);
+    st t + 56, nl;
     return 0;
   }
-  if ((lds 1 (t + 24)) + 1) * 2 >+ (lds 1 (t + 16)) {
-    htab_grow(t);
+  var 1 eq = memeq(keys + leaf * stride, key, klen);
+  if eq != 0 {
+    st (lds 1 (t + 40)) + leaf * 32 + 8, value;
+    return 0;
   }
-  htab_insert_raw(t, key, value);
+  var d = htab_first_diff(key, keys + leaf * stride, klen);
+  var nodes = lds 1 (t + 40);
+  var p = 0;
+  var n = lds 1 (t + 56);
+  while n != 0 {
+    var b = lds 1 (nodes + n * 32 + 24);
+    if b >=+ d {
+      break;
+    }
+    p = n;
+    if (((ld8 ((key) + ((b) >>> 3))) >>> (7 - ((b) & 7))) & 1) == 0 {
+      n = lds 1 (nodes + n * 32 + 8);
+    } else {
+      n = lds 1 (nodes + n * 32 + 16);
+    }
+  }
+  var nl = htab_new_leaf(t, key, value);
+  var ni = htab_new_internal(t, d);
+  nodes = lds 1 (t + 40);
+  st nodes + ni * 32 + 0, p;
+  st nodes + nl * 32 + 0, ni;
+  st nodes + n * 32 + 0, ni;
+  if (((ld8 ((key) + ((d) >>> 3))) >>> (7 - ((d) & 7))) & 1) == 0 {
+    st nodes + ni * 32 + 8, nl;
+    st nodes + ni * 32 + 16, n;
+  } else {
+    st nodes + ni * 32 + 8, n;
+    st nodes + ni * 32 + 16, nl;
+  }
+  if p == 0 {
+    st t + 56, ni;
+  } else {
+    if (lds 1 (nodes + p * 32 + 8)) == n {
+      st nodes + p * 32 + 8, ni;
+    } else {
+      st nodes + p * 32 + 16, ni;
+    }
+  }
   return 0;
 }
 fun 1 htab_del(1 t, 1 key) {
-  var 1 i = htab_find_slot(t, key);
-  var cap = lds 1 (t + 16);
-  if i == cap {
-    return 0;
-  }
   var klen = lds 1 (t + 0);
   var stride = lds 1 (t + 8);
+  var 1 leaf = htab_find_leaf(t, key);
+  if leaf == 0 {
+    return 0;
+  }
   var keys = lds 1 (t + 32);
-  var vals = lds 1 (t + 40);
-  var used = lds 1 (t + 48);
-  var order = lds 1 (t + 56);
-  var order_pos = lds 1 (t + 64);
-  var 1 deleted_pos = lds 1 (order_pos + i * 8);
-  var j = i;
-  while true {
-    j = (j + 1) & (cap - 1);
-    if (ld8 (used + j)) == 0 {
-      break;
+  var 1 eq = memeq(keys + leaf * stride, key, klen);
+  if eq == 0 {
+    return 0;
+  }
+  var nodes = lds 1 (t + 40);
+  var pos = lds 1 (nodes + leaf * 32 + 16);
+  var count = (lds 1 (t + 24)) - 1;
+  if pos != count {
+    var order = lds 1 (t + 48);
+    var moved = lds 1 (order + count * 8);
+    st order + pos * 8, moved;
+    st nodes + moved * 32 + 16, pos;
+  }
+  st t + 24, count;
+  if leaf == (lds 1 (t + 56)) {
+    st t + 56, 0;
+  } else {
+    var p = lds 1 (nodes + leaf * 32 + 0);
+    var g = lds 1 (nodes + p * 32 + 0);
+    var s = lds 1 (nodes + p * 32 + 8);
+    if s == leaf {
+      s = lds 1 (nodes + p * 32 + 16);
     }
-    var 1 h = htab_hash(keys + j * stride, klen);
-    var home = h & (cap - 1);
-    var movable = 0;
-    if i <=+ j {
-      if (home <=+ i) || (home >+ j) {
-        movable = 1;
-      }
+    st nodes + s * 32 + 0, g;
+    if g == 0 {
+      st t + 56, s;
     } else {
-      if (home <=+ i) && (home >+ j) {
-        movable = 1;
+      if (lds 1 (nodes + g * 32 + 8)) == p {
+        st nodes + g * 32 + 8, s;
+      } else {
+        st nodes + g * 32 + 16, s;
       }
     }
-    if movable != 0 {
-      memcpy(keys + i * stride, keys + j * stride, klen);
-      st vals + i * 8, lds 1 (vals + j * 8);
-      var 1 moved_pos = lds 1 (order_pos + j * 8);
-      st order + moved_pos * 8, i;
-      st order_pos + i * 8, moved_pos;
-      i = j;
-    }
+    st nodes + p * 32 + 0, lds 1 (t + 72);
+    st t + 72, p;
   }
-  st8 used + i, 0;
-  var 1 n = lds 1 (t + 24);
-  var 1 last_pos = n - 1;
-  if deleted_pos != last_pos {
-    var 1 last_slot = lds 1 (order + last_pos * 8);
-    st order + deleted_pos * 8, last_slot;
-    st order_pos + last_slot * 8, deleted_pos;
-  }
-  st t + 24, last_pos;
+  st nodes + leaf * 32 + 0, lds 1 (t + 72);
+  st t + 72, leaf;
   return 1;
 }
 fun 1 htab_truncate(1 t, 1 n) {
   var stride = lds 1 (t + 8);
   while (lds 1 (t + 24)) >+ n {
-    var 1 pos = (lds 1 (t + 24)) - 1;
-    var 1 slot = lds 1 ((lds 1 (t + 56)) + pos * 8);
-    htab_del(t, (lds 1 (t + 32)) + slot * stride);
+    var pos = (lds 1 (t + 24)) - 1;
+    var leaf = lds 1 ((lds 1 (t + 48)) + pos * 8);
+    htab_del(t, (lds 1 (t + 32)) + leaf * stride);
   }
   return 0;
 }
@@ -1746,74 +1719,60 @@ fun 1 htab_count(1 t) {
 fun 1 htab_cap(1 t) {
   return lds 1 (t + 16);
 }
-fun {1,1,1} htab_slot(1 t, 1 i) {
-  var used = ld8 ((lds 1 (t + 48)) + i);
-  var keyp = (lds 1 (t + 32)) + i * (lds 1 (t + 8));
-  var val = lds 1 ((lds 1 (t + 40)) + i * 8);
-  return <used, keyp, val>;
-}
 fun {1,1,1} htab_item(1 t, 1 ordinal) {
-  var i = lds 1 ((lds 1 (t + 56)) + ordinal * 8);
-  return htab_slot(t, i);
+  if ordinal >=+ (lds 1 (t + 24)) {
+    return <0, 0, 0>;
+  }
+  var leaf = lds 1 ((lds 1 (t + 48)) + ordinal * 8);
+  var stride = lds 1 (t + 8);
+  var keyp = (lds 1 (t + 32)) + leaf * stride;
+  var val = lds 1 ((lds 1 (t + 40)) + leaf * 32 + 8);
+  return <1, keyp, val>;
 }
 fun {1,1} htab_keys(1 t) {
   var stride = lds 1 (t + 8);
   var n = lds 1 (t + 24);
   var 1 out = alloc(n * stride + 8);
   var keys = lds 1 (t + 32);
-  var order = lds 1 (t + 56);
+  var order = lds 1 (t + 48);
   var i = 0;
-  var k = 0;
   while i < n {
-    var slot = lds 1 (order + i * 8);
-    memcpy(out + k * stride, keys + slot * stride, stride);
-    k = k + 1;
+    var leaf = lds 1 (order + i * 8);
+    memcpy(out + i * stride, keys + leaf * stride, stride);
     i = i + 1;
   }
   return <out, n>;
 }
 fun 1 htab_copy(1 t) {
-  var cap = lds 1 (t + 16);
+  var nodecap = lds 1 (t + 80);
   var stride = lds 1 (t + 8);
-  var 1 n = alloc(72);
-  memcpy(n, t, 72);
-  var 1 keys = alloc(cap * stride);
-  memcpy(keys, lds 1 (t + 32), cap * stride);
+  var 1 n = alloc(88);
+  memcpy(n, t, 88);
+  var 1 keys = alloc((nodecap + 1) * stride);
+  memcpy(keys, lds 1 (t + 32), (nodecap + 1) * stride);
   st n + 32, keys;
-  var 1 vals = alloc(cap * 8);
-  memcpy(vals, lds 1 (t + 40), cap * 8);
-  st n + 40, vals;
-  var 1 used = alloc(cap);
-  memcpy(used, lds 1 (t + 48), cap);
-  st n + 48, used;
-  var 1 order = alloc(cap * 8);
-  memcpy(order, lds 1 (t + 56), cap * 8);
-  st n + 56, order;
-  var 1 order_pos = alloc(cap * 8);
-  memcpy(order_pos, lds 1 (t + 64), cap * 8);
-  st n + 64, order_pos;
+  var 1 nodes = alloc((nodecap + 1) * 32);
+  memcpy(nodes, lds 1 (t + 40), (nodecap + 1) * 32);
+  st n + 40, nodes;
+  var 1 order = alloc((nodecap + 1) * 8);
+  memcpy(order, lds 1 (t + 48), (nodecap + 1) * 8);
+  st n + 48, order;
   return n;
 }
 fun 1 htab_copy_scratch(1 t) {
-  var cap = lds 1 (t + 16);
+  var nodecap = lds 1 (t + 80);
   var stride = lds 1 (t + 8);
-  var 1 n = scratch_alloc(72);
-  memcpy(n, t, 72);
-  var 1 keys = scratch_alloc(cap * stride);
-  memcpy(keys, lds 1 (t + 32), cap * stride);
+  var 1 n = scratch_alloc(88);
+  memcpy(n, t, 88);
+  var 1 keys = scratch_alloc((nodecap + 1) * stride);
+  memcpy(keys, lds 1 (t + 32), (nodecap + 1) * stride);
   st n + 32, keys;
-  var 1 vals = scratch_alloc(cap * 8);
-  memcpy(vals, lds 1 (t + 40), cap * 8);
-  st n + 40, vals;
-  var 1 used = scratch_alloc(cap);
-  memcpy(used, lds 1 (t + 48), cap);
-  st n + 48, used;
-  var 1 order = scratch_alloc(cap * 8);
-  memcpy(order, lds 1 (t + 56), cap * 8);
-  st n + 56, order;
-  var 1 order_pos = scratch_alloc(cap * 8);
-  memcpy(order_pos, lds 1 (t + 64), cap * 8);
-  st n + 64, order_pos;
+  var 1 nodes = scratch_alloc((nodecap + 1) * 32);
+  memcpy(nodes, lds 1 (t + 40), (nodecap + 1) * 32);
+  st n + 40, nodes;
+  var 1 order = scratch_alloc((nodecap + 1) * 8);
+  memcpy(order, lds 1 (t + 48), (nodecap + 1) * 8);
+  st n + 48, order;
   return n;
 }
 var 1 secp_accel_scratch = 0;

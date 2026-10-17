@@ -898,8 +898,10 @@ disjunction they come from --- both halves `access_plus_warm_pos` and
 so a caller can hand either bound straight to them instead of re-deriving it
 from `access_gas_cost_runs_warm` / `_runs_cold` by hand.
 
-The one callee, `is_warm_address`, remains a hypothesis: it is an `htab` probe,
-which needs the load-factor invariant `2*count <= cap` first. What is settled is
+The one callee, `is_warm_address`, remains a hypothesis: it is an `htab` probe.
+Its termination is now structural (the path-compressed trie in `lib/htab.pnk`
+descends to an increasing branch bit, at most `8*key_len` nodes), so only the
+probe's *result* has to be related to the accessed set. What is settled is
 that **nothing after it can make the charge zero**, which is the part that had to
 be read off the AST rather than off the source. (`access_gas_cost` used to call
 `warm_address` itself; since the gas-before-allocation change the caller warms the
@@ -1063,13 +1065,14 @@ accelerated guest has **257 `while` loops**. By loop condition:
     (`mpt.pnk:410,714,857,919,1075`) — bounded by trie depth 64 and the witness
     node count, itself bounded by the input.
   * RLP nested-list validation (`rlp.pnk:177`) — bounded by the item length.
-  * `htab_find_slot`/`htab_insert_raw`/`htab_del`
-    (`htab.pnk:187,225,298`) — open-addressing probes with wrap-around, which
-    terminate *only* under the load-factor invariant `2·count ≤ cap` that
-    `htab_set` maintains by calling `htab_grow`. `htab_del`'s `while true`
-    needs the same invariant (it stops at the first empty slot). This invariant
-    is a genuine proof obligation, not a formality: a full table would spin
-    forever.
+  * `htab_find_leaf`/`htab_set`/`htab_del` (`htab.pnk`) — descents of a
+    path-compressed binary trie. Termination is structural: every internal
+    node's branch bit is strictly greater than its parent's, and a leaf is
+    marked with `8*key_len`, so a descent visits at most `8*key_len` nodes.
+    `htab_set` and `htab_del` add `htab_first_diff`, which scans at most
+    `key_len` bytes, and one more bounded descent. (The previous
+    open-addressing probes terminated only under the load-factor invariant
+    `2·count ≤ cap`; the trie removes that proof obligation.)
   * modular-inverse and reduction loops (`secp256k1.pnk:475`, `fp384.pnk:264`,
     `bn254.pnk:1140`, `modexp.pnk:122`, `u256.pnk:400`) — terminate by a
     decreasing valuation or a bounded carry, all with small constant bounds.

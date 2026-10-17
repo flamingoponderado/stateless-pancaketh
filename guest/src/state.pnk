@@ -5,7 +5,8 @@
    rollback, the four write maps are restored).
    Requires: lib/mem, lib/arith, lib/u256, lib/keccak, lib/rlp, lib/htab, mpt.
 
-   Map representations (Python dicts -> hash tables; order is unobservable):
+   Map representations (Python dicts -> insertion-ordered maps in lib/htab;
+   the maps' order is unobservable):
    * accountWrites : addr(20) -> ACCT record ptr, or ACCT_NONE for a deleted account
    * storageWrites : addr(20) -> inner htab: key(32) -> ptr to 32-byte U256 (4 LE limbs)
    * codeWrites    : hash(32) -> ptr to <ptr,len> slice record
