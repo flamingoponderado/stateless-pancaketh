@@ -1,0 +1,163 @@
+#include "config.h"
+#include "lib/mem.pnk"
+#include "lib/htab.pnk"
+/* Exercise the insertion-ordered key-value map: random keys, keys that share
+   long prefixes (single-bit keys, the worst case for the Patricia trie),
+   updates, deletes, reinserts, truncation, iteration order, copy independence
+   and deleting down to empty.  The expected output is built by
+   exp_htab_ops.py, which mirrors the same operation sequence. */
+
+var 1 g_out = 0;
+var 1 g_outn = 0;
+
+fun 1 emit(1 w) {
+  st g_out + g_outn * 8, w;
+  g_outn = g_outn + 1;
+  return 0;
+}
+
+/* Deterministic key i for a given key length and seed.  Indices below 64 are
+   single-bit keys (and index 64 is all zero bytes), so many pairs differ at a
+   late bit; the rest are pseudorandom bytes. */
+fun 1 fill_key(1 p, 1 klen, 1 i, 1 seed) {
+  memzero(p, klen);
+  if i < 64 {
+    st8 p + (i >>> 3), 128 >>> (i & 7);
+    return 0;
+  }
+  var x = seed ^ (i * 2654435761);
+  var j = 0;
+  while j < klen {
+    x = x * 6364136223846793005 + 1442695040888963407;
+    st8 p + j, (x >>> 56) & 255;
+    j = j + 1;
+  }
+  return 0;
+}
+
+fun 1 run_case(1 klen, 1 seed) {
+  var 1 t = htab_new(klen, 2);
+  var 1 kb = alloc(64);
+  var i = 0;
+  /* Insert 128 keys in a scrambled order. */
+  while i < 128 {
+    var k = (i * 37) & 127;
+    fill_key(kb, klen, k, seed);
+    htab_set(t, kb, k + 1000);
+    i = i + 1;
+  }
+  var cnt = htab_count(t);
+  emit(cnt);
+  /* Delete every even key. */
+  i = 0;
+  while i < 128 {
+    if (i & 1) == 0 {
+      fill_key(kb, klen, i, seed);
+      htab_del(t, kb);
+    }
+    i = i + 1;
+  }
+  /* Reinsert every key 2 mod 4 (even, so deleted above) and update every key
+     3 mod 8 (odd, so still present). */
+  i = 0;
+  while i < 128 {
+    if (i - (i >>> 2) * 4) == 2 {
+      fill_key(kb, klen, i, seed);
+      htab_set(t, kb, i + 5000);
+    }
+    if (i - (i >>> 3) * 8) == 3 {
+      fill_key(kb, klen, i, seed);
+      htab_set(t, kb, i + 5000);
+    }
+    i = i + 1;
+  }
+  /* Look every key up. */
+  i = 0;
+  while i < 128 {
+    fill_key(kb, klen, i, seed);
+    var {1,1} r = htab_get(t, kb);
+    emit(r.0 | (r.1 << 8));
+    i = i + 1;
+  }
+  var n = htab_count(t);
+  emit(n);
+  /* Iteration order must stay insertion order. */
+  i = 0;
+  while i < n {
+    var {1,1,1} s = htab_item(t, i);
+    var kp = s.1;
+    emit(lds 1 kp);
+    emit(s.2);
+    i = i + 1;
+  }
+  /* Append more entries, then truncate back: those must disappear. */
+  i = 128;
+  while i < 144 {
+    fill_key(kb, klen, i, seed);
+    htab_set(t, kb, 7000 + i);
+    i = i + 1;
+  }
+  htab_truncate(t, n);
+  cnt = htab_count(t);
+  emit(cnt);
+  i = 128;
+  while i < 144 {
+    fill_key(kb, klen, i, seed);
+    var {1,1} r2 = htab_get(t, kb);
+    emit(r2.0);
+    i = i + 1;
+  }
+  i = 0;
+  while i < 4 {
+    fill_key(kb, klen, i, seed);
+    var {1,1} r3 = htab_get(t, kb);
+    emit(r3.0 | (r3.1 << 8));
+    i = i + 1;
+  }
+  /* A copy is independent: empty the copy, keep the original. */
+  var 1 c = htab_copy(t);
+  var cc = htab_count(c);
+  while cc != 0 {
+    var {1,1,1} s2 = htab_item(c, 0);
+    htab_del(c, s2.1);
+    cc = htab_count(c);
+  }
+  cc = htab_count(c);
+  emit(cc);
+  cc = htab_count(t);
+  emit(cc);
+  /* Empty the original too, then reuse it. */
+  cc = htab_count(t);
+  while cc != 0 {
+    var {1,1,1} s3 = htab_item(t, 0);
+    htab_del(t, s3.1);
+    cc = htab_count(t);
+  }
+  cc = htab_count(t);
+  emit(cc);
+  fill_key(kb, klen, 127, seed);
+  htab_set(t, kb, 9999);
+  var {1,1} r4 = htab_get(t, kb);
+  emit(r4.0 | (r4.1 << 8));
+  cc = htab_count(t);
+  emit(cc);
+  return 0;
+}
+
+fun 1 main() {
+  mem_init();
+  var {1,1} inp = input_blob();
+  var seed = 0;
+  if inp.1 >=+ 8 {
+    seed = lds 1 inp.0;
+  }
+  g_out = alloc(65536);
+  run_case(20, seed);
+  run_case(28, seed + 1);
+  run_case(32, seed + 2);
+  run_case(52, seed + 3);
+  run_case(60, seed + 4);
+  output_write(g_out, g_outn * 8);
+  @halt(@base, 0, @base, 0);
+  return 0;
+}
