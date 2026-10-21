@@ -16,6 +16,9 @@ cpp_debug_args=()
 if [[ "${DEBUG:-0}" == "1" ]]; then
   cpp_debug_args=(-DGUEST_DEBUG)
 fi
+if [[ "${ACCEL:-0}" == "1" ]]; then
+  cpp_debug_args+=(-DZISK_ACCEL)   # ZisK accelerator CSRs via FFI stubs in runtime/start.S
+fi
 "$CPP" "${cpp_debug_args[@]}" -P -w -nostdinc -I "$HERE/src" -x c "$src" | grep -v '^#' > "$b.pp.pnk"
 # COMPILER=flapjack (default) uses the Lean 4 port (lake exe flapjack-compile, pinned by
 # the flapjack lake dependency); COMPILER=cake uses the bootstrapped/prebuilt cake binary

@@ -107,6 +107,65 @@ fun FP fp_dbl(FP a) {
 
 /* ---------- Fp multiplication ---------- */
 
+#ifndef ZISK_ACCEL
+
+/* Montgomery multiplication (CIOS). */
+
+/* One CIOS round for the multiplier word bi: t += a * bi (t is t0..t6),
+   m = t0 * (-p^-1) mod 2^64, t = (t + m p) / 2^64.  Every carry word c is
+   the exact high half of a 128-bit sum t_j + x_j * y + c_in <= 2^128 - 1,
+   so pr.1 + s.1 + s2.1 never overflows; with a, b < p the value t stays
+   below 2p < 2^382, hence limb 6 (t6) is < 2^62 and there is no limb 7. */
+#define MONT_MAC0(aj, bi, tj) \
+  pr = mul64x64(aj, bi); s = __add_with_carry__(tj, pr.0, 0); tj = s.0; c = pr.1 + s.1;
+#define MONT_MAC(aj, bi, tj) \
+  pr = mul64x64(aj, bi); s = __add_with_carry__(tj, pr.0, 0); \
+  s2 = __add_with_carry__(s.0, c, 0); tj = s2.0; c = pr.1 + s.1 + s2.1;
+/* the m*p pass shifts by one word: the sum limb j lands in t_(j-1) */
+#define MONT_RED(pj, tj, tdst) \
+  pr = mul64x64(m, pj); s = __add_with_carry__(tj, pr.0, 0); \
+  s2 = __add_with_carry__(s.0, c, 0); tdst = s2.0; c = pr.1 + s.1 + s2.1;
+#define MONT_ROUND(bi) \
+  MONT_MAC0(a.0, bi, t0) \
+  MONT_MAC(a.1, bi, t1) \
+  MONT_MAC(a.2, bi, t2) \
+  MONT_MAC(a.3, bi, t3) \
+  MONT_MAC(a.4, bi, t4) \
+  MONT_MAC(a.5, bi, t5) \
+  t6 = t6 + c; \
+  m = t0 * FP_INV; \
+  pr = mul64x64(m, FP_P0); s = __add_with_carry__(t0, pr.0, 0); c = pr.1 + s.1; \
+  MONT_RED(FP_P1, t1, t0) \
+  MONT_RED(FP_P2, t2, t1) \
+  MONT_RED(FP_P3, t3, t2) \
+  MONT_RED(FP_P4, t4, t3) \
+  MONT_RED(FP_P5, t5, t4) \
+  t5 = t6 + c; \
+  t6 = 0;
+
+/* a * b / 2^384 mod p for a, b < p. */
+fun FP fp_mul(FP a, FP b) {
+  var t0 = 0; var t1 = 0; var t2 = 0; var t3 = 0; var t4 = 0; var t5 = 0; var t6 = 0;
+  var c = 0;
+  var m = 0;
+  var {1,1} pr = <0, 0>;
+  var {1,1} s = <0, 0>;
+  var {1,1} s2 = <0, 0>;
+  MONT_ROUND(b.0)
+  MONT_ROUND(b.1)
+  MONT_ROUND(b.2)
+  MONT_ROUND(b.3)
+  MONT_ROUND(b.4)
+  MONT_ROUND(b.5)
+  /* t < 2p: one conditional subtraction */
+  var {1,1,1,1,1,1,1} d = fp_sub_raw(<t0, t1, t2, t3, t4, t5>, FP_P_LIT);
+  if d.6 == 1 {
+    return <d.0, d.1, d.2, d.3, d.4, d.5>;
+  }
+  return <t0, t1, t2, t3, t4, t5>;
+}
+
+#else
 
 /* The accelerator consumes canonical little-endian residues and returns
    (a * b) mod p.  Keep one private, single-threaded parameter arena so the
@@ -143,6 +202,7 @@ fun FP fp_mul(FP a, FP b) {
   return lds FP fp_accel_d;
 }
 
+#endif
 
 fun FP fp_sqr(FP a) {
   return fp_mul(a, a);
@@ -151,12 +211,20 @@ fun FP fp_sqr(FP a) {
 /* canonical x -> internal representation: canonical residues are stored
    directly, so this is the identity. */
 fun FP fp_to_mont(FP a) {
+#ifdef ZISK_ACCEL
   return a;
+#else
+  return fp_mul(a, FP_R2_LIT);
+#endif
 }
 
 /* internal representation -> canonical x. */
 fun FP fp_from_mont(FP a) {
+#ifdef ZISK_ACCEL
   return a;
+#else
+  return fp_mul(a, FP_ONE_CAN);
+#endif
 }
 
 /* ---------- inversion (binary extended Euclid, HAC 14.61) ---------- */
@@ -218,7 +286,11 @@ fun FP fp_inv_raw(FP a) {
 /* Inverse, 0 -> 0 (py_ecc). */
 fun FP fp_inv(FP a) {
   var FP r = fp_inv_raw(a);
+#ifdef ZISK_ACCEL
   return r;
+#else
+  return fp_mul(r, FP_R3_LIT);
+#endif
 }
 
 /* ---------- exponentiation ---------- */

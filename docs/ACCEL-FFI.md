@@ -1,7 +1,7 @@
 # Accelerators through CakeML's foreign-call interface
 
-The guest does its crypto with ZisK precompile CSRs (the software implementations
-were removed), reached through `@name(...)` foreign calls whose stubs are in `guest/runtime/start.S`.
+The accelerated guest (`ACCEL=1`) replaces software crypto with ZisK precompile CSRs,
+reached through `@name(...)` foreign calls whose stubs are in `guest/runtime/start.S`.
 This note records how those calls relate to the foreign-call interface that
 CakeML/Pancake gives a callee, and how the guest and the stubs are arranged so that every
 accelerator call fits it.

@@ -7,8 +7,10 @@
 var 1 b2_sigma = 0;  /* 10 schedule rows, 16 nibbles per word */
 var 1 b2_iv = 0;     /* 8 IV words */
 var 1 b2_v = 0;      /* 16-word working vector */
+#ifdef ZISK_ACCEL
 var 1 b2_m = 0;      /* aligned message block for the round CSR */
 var 1 b2_round = 0;  /* {round index, v pointer, m pointer} */
+#endif
 
 #define B2_SIG(row, i) (((lds 1 (b2_sigma + (row) * 8)) >>> ((i) * 4)) & 15)
 #define V(i) (lds 1 (b2_v + (i) * 8))
@@ -19,12 +21,16 @@ fun 1 blake2_init() {
   }
   b2_sigma = alloc(80);
   b2_iv = alloc(64);
+#ifdef ZISK_ACCEL
   /* One 264-byte block, the array of the foreign call (docs/ACCEL-FFI.md): the
      SIGMA row (a value), the 128-byte working vector and the 128-byte message; the
      stub builds the CSR's {row, v pointer, m pointer} from the array pointer. */
   b2_round = alloc(264);
   b2_v = b2_round + 8;
   b2_m = b2_round + 136;
+#else
+  b2_v = alloc(128);
+#endif
   st b2_sigma + 0, -81985529216486896;
   st b2_sigma + 8, 3853709921291437230;
   st b2_sigma + 16, 5266788149650328715;
@@ -56,6 +62,7 @@ fun 1 blake2b_f(1 rounds, 1 h, 1 m, 1 t0, 1 t1, 1 f) {
   if f != 0 {
     st b2_v + 112, V(14) ^ (0 - 1);
   }
+#ifdef ZISK_ACCEL
   /* The CSR reads sixteen aligned little-endian u64s.  Copying also makes
      precompile input safe when the caller's data pointer is unaligned. */
   memcpy(b2_m, m, 128);
@@ -73,6 +80,25 @@ fun 1 blake2b_f(1 rounds, 1 h, 1 m, 1 t0, 1 t1, 1 f) {
       row = 0;
     }
   }
+#else
+  var r = 0;
+  var row = 0;
+  while r <+ rounds {
+    blake2_g(0, 4, 8, 12, lds 1 (m + B2_SIG(row, 0) * 8), lds 1 (m + B2_SIG(row, 1) * 8));
+    blake2_g(1, 5, 9, 13, lds 1 (m + B2_SIG(row, 2) * 8), lds 1 (m + B2_SIG(row, 3) * 8));
+    blake2_g(2, 6, 10, 14, lds 1 (m + B2_SIG(row, 4) * 8), lds 1 (m + B2_SIG(row, 5) * 8));
+    blake2_g(3, 7, 11, 15, lds 1 (m + B2_SIG(row, 6) * 8), lds 1 (m + B2_SIG(row, 7) * 8));
+    blake2_g(0, 5, 10, 15, lds 1 (m + B2_SIG(row, 8) * 8), lds 1 (m + B2_SIG(row, 9) * 8));
+    blake2_g(1, 6, 11, 12, lds 1 (m + B2_SIG(row, 10) * 8), lds 1 (m + B2_SIG(row, 11) * 8));
+    blake2_g(2, 7, 8, 13, lds 1 (m + B2_SIG(row, 12) * 8), lds 1 (m + B2_SIG(row, 13) * 8));
+    blake2_g(3, 4, 9, 14, lds 1 (m + B2_SIG(row, 14) * 8), lds 1 (m + B2_SIG(row, 15) * 8));
+    r = r + 1;
+    row = row + 1;
+    if row == 10 {
+      row = 0;
+    }
+  }
+#endif
   var i = 0;
   while i < 8 {
     st h + i * 8, (lds 1 (h + i * 8)) ^ V(i) ^ V(i + 8);

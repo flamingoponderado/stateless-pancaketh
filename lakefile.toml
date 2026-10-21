@@ -41,7 +41,7 @@ root = "Tools.RunGuest"
 name = "trace-guest"
 root = "Tools.TraceGuest"
 
-# `lake exe frame-bound [N]` prints a source-level upper estimate
+# `lake exe frame-bound [--software] [N]` prints a source-level upper estimate
 # of each function's stack frame (all variables spilled), see Tools/FrameBound.lean.
 [[lean_exe]]
 name = "frame-bound"

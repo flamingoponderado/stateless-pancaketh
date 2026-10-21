@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """accel-ffi-smoke.py -- run guest/test/accel_ffi_smoke.pnk (one @keccakf and one
 @sha256f call in the foreign-call convention of docs/ACCEL-FFI.md) on the
-guest build under ziskemu and compare its output with hashlib:
+ZISK_ACCEL build under ziskemu and compare its output with hashlib:
 
   bytes  0..32  Keccak-f of the SHA3-256 padding block of the empty message, whose
                 first 32 bytes are the SHA3-256 digest of the empty message
@@ -23,9 +23,10 @@ def expected():
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         elf, inp, out = (os.path.join(tmp, n) for n in ("smoke.elf", "in.bin", "out.bin"))
+        env = dict(os.environ, ACCEL="1")
         subprocess.run([os.path.join(ROOT, "guest/build.sh"),
                         os.path.join(ROOT, "guest/test/accel_ffi_smoke.pnk"), elf],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       check=True, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with open(inp, "wb") as f:
             f.write((0).to_bytes(8, "little"))      # empty blob, ziskemu input framing
         subprocess.run([ZISKEMU, "-e", elf, "-i", inp, "-o", out],

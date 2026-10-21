@@ -75,22 +75,27 @@
 
 var 1 secp_accel_scratch = 0;
 
+#ifdef ZISK_ACCEL
 fun 1 secp_accel_init_block(1 base, U256 modulus) {
   st base + SECP_ACCEL_C, U256_ZERO;
   st base + SECP_ACCEL_M, modulus;
   return 0;
 }
+#endif
 
 fun 1 secp256k1_init() {
+#ifdef ZISK_ACCEL
   if secp_accel_scratch != 0 {
     return 0;
   }
   secp_accel_scratch = alloc(SECP_ACCEL_SIZE);
   secp_accel_init_block(secp_accel_scratch + SECP_ACCEL_PBASE, SECP_P);
   secp_accel_init_block(secp_accel_scratch + SECP_ACCEL_NBASE, SECP_N);
+#endif
   return 0;
 }
 
+#ifdef ZISK_ACCEL
 fun U256 secp_accel_modmul_at(1 base, U256 a, U256 b) {
   st base + SECP_ACCEL_A, a;
   st base + SECP_ACCEL_B, b;
@@ -113,6 +118,7 @@ fun U256 secp_accel_modmul_n(U256 a, U256 b) {
   @arith256mod(base, 0, base, SECP_ACCEL_BLOCK);
   return lds U256 (base + SECP_ACCEL_D);
 }
+#endif
 
 /* ---------- field arithmetic mod p (inputs and outputs in [0, p)) ---------- */
 
@@ -158,6 +164,7 @@ fun U256 fp_reduce(U256 a) {
   return a;
 }
 
+#ifdef ZISK_ACCEL
 fun U256 fp_mul(U256 a, U256 b) {
   return secp_accel_modmul_p(a, b);
 }
@@ -165,8 +172,227 @@ fun U256 fp_mul(U256 a, U256 b) {
 fun U256 fp_sqr(U256 a) {
   return secp_accel_modmul_p(a, a);
 }
+#endif
 
+#ifndef ZISK_ACCEL
+#ifdef SECP_SIMPLE_MUL
+fun U256 fp_mul(U256 a, U256 b) {
+  return u256_mulmod(a, b, SECP_P);
+}
+#endif
+#ifdef SECP_FOLD64_MUL
+/* (a * b) mod p by folding: with t = hi * 2^256 + lo, t == hi * C + lo (mod p)
+   where C = 2^32 + 977.  hi * C < 2^289, so u = hi * C + lo < 2^290 = u_hi * 2^256 + u_lo
+   with u_hi < 2^34; then v = u_hi * C + u_lo < 2^256 + 2^67.  If v overflows 2^256
+   the result is (v - 2^256) + C (< p); else one conditional subtraction of p. */
+fun U256 fp_mul(U256 a, U256 b) {
+  var U512 t = u256_mul_full(a, b);
+  /* hi * C as 5 limbs (m0..m3, m4 < 2^33) */
+  var {1,1} q0 = mul64x64(t.4, SECP_C);
+  var {1,1} q1 = mul64x64(t.5, SECP_C);
+  var {1,1} q2 = mul64x64(t.6, SECP_C);
+  var {1,1} q3 = mul64x64(t.7, SECP_C);
+  var {1,1} c1 = __add_with_carry__(q1.0, q0.1, 0);
+  var {1,1} c2 = __add_with_carry__(q2.0, q1.1, c1.1);
+  var {1,1} c3 = __add_with_carry__(q3.0, q2.1, c2.1);
+  var m4 = q3.1 + c3.1;
+  /* u = (hi * C) + lo */
+  var {1,1} s0 = __add_with_carry__(q0.0, t.0, 0);
+  var {1,1} s1 = __add_with_carry__(c1.0, t.1, s0.1);
+  var {1,1} s2 = __add_with_carry__(c2.0, t.2, s1.1);
+  var {1,1} s3 = __add_with_carry__(c3.0, t.3, s2.1);
+  var uhi = m4 + s3.1;                       /* < 2^34 */
+  /* v = u_hi * C + u_lo; u_hi * C < 2^67 fits <lo, hi> with hi < 8 */
+  var {1,1} w = mul64x64(uhi, SECP_C);
+  var {1,1} v0 = __add_with_carry__(s0.0, w.0, 0);
+  var {1,1} v1 = __add_with_carry__(s1.0, w.1, v0.1);
+  var {1,1} v2 = __add_with_carry__(s2.0, 0, v1.1);
+  var {1,1} v3 = __add_with_carry__(s3.0, 0, v2.1);
+  var U256 r = <v0.0, v1.0, v2.0, v3.0>;
+  if v3.1 == 1 {
+    /* r + C < 2^68: no carry, and < p */
+    return u256_add(r, <SECP_C, 0, 0, 0>);
+  }
+  return fp_reduce(r);
+}
+#endif
+#if !defined(SECP_SIMPLE_MUL) && !defined(SECP_FOLD64_MUL)
+/* Comba product on 32-bit digits: column k sums a_i * b_j (i + j = k), each a
+   64-bit product, as L = sum of low halves and H = sum of high halves (both
+   < 2^36); with the incoming carry c, digit k = (L + c) & M32 and the new
+   carry is ((L + c) >>> 32) + H.  Then two digit-level folds by C = 2^32 + 977:
+   t = hi * 2^256 + lo == lo + (hi << 32) + 977 * hi (mod p), with
+   u = that (< 2^290, top part u_hi < 2^34), v = u_lo + (u_hi << 32) + 977 * u_hi
+   (< 2^256 + 2^67); if v overflows 2^256 the result is (v mod 2^256) + C (< p),
+   else one conditional subtraction of p. */
+#define SECP_FOLD_RETURN \
+  d15 = c;                                   /* < 2^32: the product is < 2^512 */ \
+  /* fold 1: u_k = d_k + d_(k+7) + 977 d_(k+8) + carry */ \
+  col = d0 + 977 * d8; \
+  var u0 = col & M32; c = col >>> 32; \
+  col = d1 + d8 + 977 * d9 + c; \
+  var u1 = col & M32; c = col >>> 32; \
+  col = d2 + d9 + 977 * d10 + c; \
+  var u2 = col & M32; c = col >>> 32; \
+  col = d3 + d10 + 977 * d11 + c; \
+  var u3 = col & M32; c = col >>> 32; \
+  col = d4 + d11 + 977 * d12 + c; \
+  var u4 = col & M32; c = col >>> 32; \
+  col = d5 + d12 + 977 * d13 + c; \
+  var u5 = col & M32; c = col >>> 32; \
+  col = d6 + d13 + 977 * d14 + c; \
+  var u6 = col & M32; c = col >>> 32; \
+  col = d7 + d14 + 977 * d15 + c; \
+  var u7 = col & M32; c = col >>> 32; \
+  var uhi = d15 + c;                         /* < 2^34 */ \
+  /* fold 2: v = u_lo + (uhi << 32) + 977 uhi */ \
+  col = u0 + 977 * uhi; \
+  var v0 = col & M32; c = col >>> 32; \
+  col = u1 + (uhi & M32) + c; \
+  var v1 = col & M32; c = col >>> 32; \
+  col = u2 + (uhi >>> 32) + c; \
+  var v2 = col & M32; c = col >>> 32; \
+  col = u3 + c; \
+  var v3 = col & M32; c = col >>> 32; \
+  col = u4 + c; \
+  var v4 = col & M32; c = col >>> 32; \
+  col = u5 + c; \
+  var v5 = col & M32; c = col >>> 32; \
+  col = u6 + c; \
+  var v6 = col & M32; c = col >>> 32; \
+  col = u7 + c; \
+  var v7 = col & M32; c = col >>> 32; \
+  var U256 r = <v0 | (v1 << 32), v2 | (v3 << 32), v4 | (v5 << 32), v6 | (v7 << 32)>; \
+  if c == 1 { \
+    return u256_add(r, <SECP_C, 0, 0, 0>);   /* r < 2^67: no carry, result < p */ \
+  } \
+  return fp_reduce(r);
+#define SECP_PRD(x, y) p = (x) * (y); L = L + (p & M32); H = H + (p >>> 32);
+#define SECP_COL(dk) col = L + c; dk = col & M32; c = (col >>> 32) + H; L = 0; H = 0;
+fun U256 fp_mul(U256 a, U256 b) {
+  var a0 = a.0 & M32;
+  var a1 = a.0 >>> 32;
+  var a2 = a.1 & M32;
+  var a3 = a.1 >>> 32;
+  var a4 = a.2 & M32;
+  var a5 = a.2 >>> 32;
+  var a6 = a.3 & M32;
+  var a7 = a.3 >>> 32;
+  var b0 = b.0 & M32;
+  var b1 = b.0 >>> 32;
+  var b2 = b.1 & M32;
+  var b3 = b.1 >>> 32;
+  var b4 = b.2 & M32;
+  var b5 = b.2 >>> 32;
+  var b6 = b.3 & M32;
+  var b7 = b.3 >>> 32;
+  var p = 0;
+  var L = 0;
+  var H = 0;
+  var c = 0;
+  var col = 0;
+  var d0 = 0; var d1 = 0; var d2 = 0; var d3 = 0;
+  var d4 = 0; var d5 = 0; var d6 = 0; var d7 = 0;
+  var d8 = 0; var d9 = 0; var d10 = 0; var d11 = 0;
+  var d12 = 0; var d13 = 0; var d14 = 0; var d15 = 0;
+  SECP_PRD(a0, b0)
+  SECP_COL(d0)
+  SECP_PRD(a0, b1) SECP_PRD(a1, b0)
+  SECP_COL(d1)
+  SECP_PRD(a0, b2) SECP_PRD(a1, b1) SECP_PRD(a2, b0)
+  SECP_COL(d2)
+  SECP_PRD(a0, b3) SECP_PRD(a1, b2) SECP_PRD(a2, b1) SECP_PRD(a3, b0)
+  SECP_COL(d3)
+  SECP_PRD(a0, b4) SECP_PRD(a1, b3) SECP_PRD(a2, b2) SECP_PRD(a3, b1) SECP_PRD(a4, b0)
+  SECP_COL(d4)
+  SECP_PRD(a0, b5) SECP_PRD(a1, b4) SECP_PRD(a2, b3) SECP_PRD(a3, b2) SECP_PRD(a4, b1) SECP_PRD(a5, b0)
+  SECP_COL(d5)
+  SECP_PRD(a0, b6) SECP_PRD(a1, b5) SECP_PRD(a2, b4) SECP_PRD(a3, b3) SECP_PRD(a4, b2) SECP_PRD(a5, b1) SECP_PRD(a6, b0)
+  SECP_COL(d6)
+  SECP_PRD(a0, b7) SECP_PRD(a1, b6) SECP_PRD(a2, b5) SECP_PRD(a3, b4) SECP_PRD(a4, b3) SECP_PRD(a5, b2) SECP_PRD(a6, b1) SECP_PRD(a7, b0)
+  SECP_COL(d7)
+  SECP_PRD(a1, b7) SECP_PRD(a2, b6) SECP_PRD(a3, b5) SECP_PRD(a4, b4) SECP_PRD(a5, b3) SECP_PRD(a6, b2) SECP_PRD(a7, b1)
+  SECP_COL(d8)
+  SECP_PRD(a2, b7) SECP_PRD(a3, b6) SECP_PRD(a4, b5) SECP_PRD(a5, b4) SECP_PRD(a6, b3) SECP_PRD(a7, b2)
+  SECP_COL(d9)
+  SECP_PRD(a3, b7) SECP_PRD(a4, b6) SECP_PRD(a5, b5) SECP_PRD(a6, b4) SECP_PRD(a7, b3)
+  SECP_COL(d10)
+  SECP_PRD(a4, b7) SECP_PRD(a5, b6) SECP_PRD(a6, b5) SECP_PRD(a7, b4)
+  SECP_COL(d11)
+  SECP_PRD(a5, b7) SECP_PRD(a6, b6) SECP_PRD(a7, b5)
+  SECP_COL(d12)
+  SECP_PRD(a6, b7) SECP_PRD(a7, b6)
+  SECP_COL(d13)
+  SECP_PRD(a7, b7)
+  SECP_COL(d14)
+  SECP_FOLD_RETURN
+}
 
+/* a^2 mod p: the comba columns pair symmetric products once (i < j) into
+   Lc/Hc, doubled at the column end (Lc, Hc < 2^35, so no overflow). */
+#define SECP_PRC(x, y) p = (x) * (y); Lc = Lc + (p & M32); Hc = Hc + (p >>> 32);
+#define SECP_COLS(dk) L = L + Lc + Lc; H = H + Hc + Hc; Lc = 0; Hc = 0; SECP_COL(dk)
+fun U256 fp_sqr(U256 a) {
+  var a0 = a.0 & M32;
+  var a1 = a.0 >>> 32;
+  var a2 = a.1 & M32;
+  var a3 = a.1 >>> 32;
+  var a4 = a.2 & M32;
+  var a5 = a.2 >>> 32;
+  var a6 = a.3 & M32;
+  var a7 = a.3 >>> 32;
+  var p = 0;
+  var L = 0;
+  var H = 0;
+  var Lc = 0;
+  var Hc = 0;
+  var c = 0;
+  var col = 0;
+  var d0 = 0; var d1 = 0; var d2 = 0; var d3 = 0;
+  var d4 = 0; var d5 = 0; var d6 = 0; var d7 = 0;
+  var d8 = 0; var d9 = 0; var d10 = 0; var d11 = 0;
+  var d12 = 0; var d13 = 0; var d14 = 0; var d15 = 0;
+  SECP_PRD(a0, a0)
+  SECP_COLS(d0)
+  SECP_PRC(a0, a1)
+  SECP_COLS(d1)
+  SECP_PRC(a0, a2) SECP_PRD(a1, a1)
+  SECP_COLS(d2)
+  SECP_PRC(a0, a3) SECP_PRC(a1, a2)
+  SECP_COLS(d3)
+  SECP_PRC(a0, a4) SECP_PRC(a1, a3) SECP_PRD(a2, a2)
+  SECP_COLS(d4)
+  SECP_PRC(a0, a5) SECP_PRC(a1, a4) SECP_PRC(a2, a3)
+  SECP_COLS(d5)
+  SECP_PRC(a0, a6) SECP_PRC(a1, a5) SECP_PRC(a2, a4) SECP_PRD(a3, a3)
+  SECP_COLS(d6)
+  SECP_PRC(a0, a7) SECP_PRC(a1, a6) SECP_PRC(a2, a5) SECP_PRC(a3, a4)
+  SECP_COLS(d7)
+  SECP_PRC(a1, a7) SECP_PRC(a2, a6) SECP_PRC(a3, a5) SECP_PRD(a4, a4)
+  SECP_COLS(d8)
+  SECP_PRC(a2, a7) SECP_PRC(a3, a6) SECP_PRC(a4, a5)
+  SECP_COLS(d9)
+  SECP_PRC(a3, a7) SECP_PRC(a4, a6) SECP_PRD(a5, a5)
+  SECP_COLS(d10)
+  SECP_PRC(a4, a7) SECP_PRC(a5, a6)
+  SECP_COLS(d11)
+  SECP_PRC(a5, a7) SECP_PRD(a6, a6)
+  SECP_COLS(d12)
+  SECP_PRC(a6, a7)
+  SECP_COLS(d13)
+  SECP_PRD(a7, a7)
+  SECP_COLS(d14)
+  SECP_FOLD_RETURN
+}
+#endif
+#if defined(SECP_SIMPLE_MUL) || defined(SECP_FOLD64_MUL)
+fun U256 fp_sqr(U256 a) {
+  return fp_mul(a, a);
+}
+#endif
+#endif
+
+#ifdef ZISK_ACCEL
 /* Fixed-window exponentiation for the field CSRs.  The 4-bit table replaces
    the per-bit exponent helper and cuts the 255/253-bit ladders to four
    squarings per nibble plus one multiply for each non-zero nibble. */
@@ -203,6 +429,7 @@ fun U256 secp_accel_fp_pow4(U256 a, U256 e) {
   heap_release(mark);
   return r;
 }
+#endif
 
 /* a ^ e mod p, square-and-multiply from the most significant set bit. */
 fun U256 fp_pow(U256 a, U256 e) {
@@ -287,25 +514,42 @@ fun U256 mod_sub(U256 x, U256 y, U256 m) {
 
 /* a^-1 mod p (0 for a == 0). */
 fun U256 fp_inv(U256 a) {
+#ifdef ZISK_ACCEL
   return secp_accel_fp_pow4(a, SECP_P_MINUS_2);
+#else
+#ifdef SECP_FERMAT_INV
+  return fp_inv_fermat(a);
+#else
+  return modinv_bin(a, SECP_P);
+#endif
+#endif
 }
 
 /* Square-root candidate a^((p+1)/4) mod p (Lean sqrtCand); the caller checks
    that its square is a. */
 fun U256 fp_sqrt(U256 a) {
+#ifdef ZISK_ACCEL
   return secp_accel_fp_pow4(a, SECP_SQRT_EXP);
+#else
+  return fp_pow(a, SECP_SQRT_EXP);
+#endif
 }
 
 /* ---------- scalar arithmetic mod n ---------- */
 
 fun U256 fn_mul(U256 a, U256 b) {
+#ifdef ZISK_ACCEL
   return secp_accel_modmul_n(a, b);
+#else
+  return u256_mulmod(a, b, SECP_N);
+#endif
 }
 
 fun U256 fn_add(U256 a, U256 b) {
   return u256_addmod(a, b, SECP_N);
 }
 
+#ifdef ZISK_ACCEL
 /* Scalar-modulus counterpart of secp_accel_fp_pow4. */
 fun U256 secp_accel_fn_pow4(U256 a, U256 e) {
   var mark = heap_mark();
@@ -340,6 +584,7 @@ fun U256 secp_accel_fn_pow4(U256 a, U256 e) {
   heap_release(mark);
   return r;
 }
+#endif
 
 /* a ^ e mod n. */
 fun U256 fn_pow(U256 a, U256 e) {
@@ -367,7 +612,15 @@ fun U256 fn_inv_fermat(U256 a) {
 
 /* a^-1 mod n (0 for a == 0). */
 fun U256 fn_inv(U256 a) {
+#ifdef ZISK_ACCEL
   return secp_accel_fn_pow4(a, SECP_N_MINUS_2);
+#else
+#ifdef SECP_FERMAT_INV
+  return fn_inv_fermat(a);
+#else
+  return modinv_bin(a, SECP_N);
+#endif
+#endif
 }
 
 /* ---------- Jacobian point arithmetic (points in memory, see header) ---------- */
@@ -391,6 +644,7 @@ fun 1 ec_is_infinity(1 pt) {
   return u256_is_zero(z);
 }
 
+#ifdef ZISK_ACCEL
 /* Convert a finite Jacobian point to affine before handing it to a point CSR. */
 fun 1 secp_accel_normalize(1 pt) {
   var U256 z = lds U256 EC_Z(pt);
@@ -404,10 +658,12 @@ fun 1 secp_accel_normalize(1 pt) {
   ec_set_affine(pt, x, y);
   return 1;
 }
+#endif
 
 /* pt = 2 * pt.  Lean: pointAdd P P is the identity when (y + y) % p == 0, i.e.
    y == 0 (the curve has no such point, but the case is kept), else curveDbl. */
 fun 1 ec_double(1 pt) {
+#ifdef ZISK_ACCEL
   var U256 z = lds U256 EC_Z(pt);
   var 1 zz = u256_is_zero(z);
   if zz == 1 {
@@ -426,6 +682,43 @@ fun 1 ec_double(1 pt) {
   @secpdbl(pt, 0, pt, 64);
   st EC_Z(pt), <1, 0, 0, 0>;
   return 0;
+#else
+  var U256 z = lds U256 EC_Z(pt);
+  var 1 zz = u256_is_zero(z);
+  if zz == 1 {
+    return 0;
+  }
+  var U256 y = lds U256 EC_Y(pt);
+  var 1 yz = u256_is_zero(y);
+  if yz == 1 {
+    ec_set_infinity(pt);
+    return 0;
+  }
+  var U256 x = lds U256 EC_X(pt);
+  var U256 yy = fp_sqr(y);               /* Y^2 */
+  var U256 s = fp_mul(x, yy);            /* X Y^2 */
+  s = fp_add(s, s);
+  s = fp_add(s, s);                      /* S = 4 X Y^2 */
+  var U256 m = fp_sqr(x);
+  var U256 m2 = fp_add(m, m);
+  m = fp_add(m2, m);                     /* M = 3 X^2 */
+  var U256 x3 = fp_sqr(m);
+  var U256 s2 = fp_add(s, s);
+  x3 = fp_sub(x3, s2);                   /* X3 = M^2 - 2S */
+  var U256 t = fp_sub(s, x3);
+  t = fp_mul(m, t);                      /* M (S - X3) */
+  var U256 y4 = fp_sqr(yy);
+  y4 = fp_add(y4, y4);
+  y4 = fp_add(y4, y4);
+  y4 = fp_add(y4, y4);                   /* 8 Y^4 */
+  var U256 y3 = fp_sub(t, y4);
+  var U256 z3 = fp_mul(y, z);
+  z3 = fp_add(z3, z3);                   /* Z3 = 2 Y Z */
+  st EC_X(pt), x3;
+  st EC_Y(pt), y3;
+  st EC_Z(pt), z3;
+  return 0;
+#endif
 }
 
 /* pt = pt + (ax, ay) with (ax, ay) an affine point (Z2 = 1; mixed addition).
@@ -437,6 +730,7 @@ fun 1 ec_add_affine(1 pt, U256 ax, U256 ay) {
     ec_set_affine(pt, ax, ay);
     return 0;
   }
+#ifdef ZISK_ACCEL
   var 1 affine = u256_eq(z1, <1, 0, 0, 0>);
   if affine == 0 {
     secp_accel_normalize(pt);
@@ -465,6 +759,43 @@ fun 1 ec_add_affine(1 pt, U256 ax, U256 ay) {
   st EC_Y(pt), lds U256 (blk + SECP_ACCEL_ADD_P1 + 32);
   st EC_Z(pt), <1, 0, 0, 0>;
   return 0;
+#else
+  var U256 x1 = lds U256 EC_X(pt);
+  var U256 y1 = lds U256 EC_Y(pt);
+  var U256 z1z1 = fp_sqr(z1);
+  var U256 u2 = fp_mul(ax, z1z1);        /* U2 = x2 Z1^2 */
+  var U256 s2 = fp_mul(z1, z1z1);
+  s2 = fp_mul(ay, s2);                   /* S2 = y2 Z1^3 */
+  var 1 samex = u256_eq(u2, x1);
+  if samex == 1 {
+    var U256 ysum = fp_add(s2, y1);
+    var 1 ysz = u256_is_zero(ysum);
+    if ysz == 1 {
+      ec_set_infinity(pt);
+      return 0;
+    }
+    ec_double(pt);
+    return 0;
+  }
+  var U256 h = fp_sub(u2, x1);           /* H = U2 - X1 */
+  var U256 rr = fp_sub(s2, y1);          /* R = S2 - Y1 */
+  var U256 hh = fp_sqr(h);
+  var U256 hhh = fp_mul(h, hh);
+  var U256 v = fp_mul(x1, hh);           /* V = X1 H^2 */
+  var U256 x3 = fp_sqr(rr);
+  x3 = fp_sub(x3, hhh);
+  var U256 v2 = fp_add(v, v);
+  x3 = fp_sub(x3, v2);                   /* X3 = R^2 - H^3 - 2V */
+  var U256 y3 = fp_sub(v, x3);
+  y3 = fp_mul(rr, y3);
+  var U256 t = fp_mul(y1, hhh);
+  y3 = fp_sub(y3, t);                    /* Y3 = R (V - X3) - Y1 H^3 */
+  var U256 z3 = fp_mul(z1, h);           /* Z3 = Z1 H */
+  st EC_X(pt), x3;
+  st EC_Y(pt), y3;
+  st EC_Z(pt), z3;
+  return 0;
+#endif
 }
 
 /* pt = pt + q, both Jacobian (general addition, Lean pointAdd). */
@@ -557,6 +888,7 @@ fun 1 ec_mul2(1 out, U256 k1, U256 ax, U256 ay, U256 k2, U256 bx, U256 by) {
     return 0;
   }
   var mark = heap_mark();
+#ifdef ZISK_ACCEL
   /* A 2-bit joint window halves the ladder/control iterations.  The 16 affine
      entries cover d1*A + d2*B for d1,d2 in [0,3]; all CSR point operations
      return affine points, so the table can be consumed by mixed addition. */
@@ -651,6 +983,38 @@ fun 1 ec_mul2(1 out, U256 k1, U256 ax, U256 ay, U256 k2, U256 bx, U256 by) {
       }
     }
   }
+#else
+  var 1 sum = alloc(EC_POINT_BYTES);
+  ec_set_affine(sum, ax, ay);
+  ec_add_affine(sum, bx, by);
+  var 1 sum_inf = ec_is_infinity(sum);
+#ifndef ZISK_ACCEL
+  if sum_inf == 0 {
+    ec_to_affine(sum);
+  }
+#endif
+  var U256 sx = lds U256 EC_X(sum);
+  var U256 sy = lds U256 EC_Y(sum);
+  while i >+ 0 {
+    i = i - 1;
+    ec_double(out);
+    var 1 bit1 = u256_bit(k1, i);
+    var 1 bit2 = u256_bit(k2, i);
+    if bit1 == 1 {
+      if bit2 == 1 {
+        if sum_inf == 0 {
+          ec_add_affine(out, sx, sy);
+        }
+      } else {
+        ec_add_affine(out, ax, ay);
+      }
+    } else {
+      if bit2 == 1 {
+        ec_add_affine(out, bx, by);
+      }
+    }
+  }
+#endif
   heap_release(mark);
   return 0;
 }

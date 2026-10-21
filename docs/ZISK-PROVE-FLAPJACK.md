@@ -12,8 +12,8 @@ single-transaction test case, not a chain block).
 Follow [README.md's "Quick start"](../README.md#quick-start) first. This
 document assumes it has already been run: submodules initialized, `lake`
 and `spike_run` built, and `tools/make-inputs.sh 50` plus
-`tools/build_guest.sh` already producing `work/inputs/manifest.tsv` and
-`guest/build/guest.elf`.
+`tools/build_both.sh` already producing `work/inputs/manifest.tsv`,
+`guest/build/guest.elf`, and `guest/build/guest-accel.elf`.
 
 ## Prerequisites
 
@@ -73,9 +73,10 @@ other work on a shared machine, as done in every command below.
 
 ## Build `hello.elf`
 
-Quick Start already builds `guest/build/guest.elf`, and its `work/inputs/manifest.tsv` (50
+Quick Start already builds `guest/build/guest.elf` and
+`guest/build/guest-accel.elf`, and its `work/inputs/manifest.tsv` (50
 fixtures) already includes fixture 00000. The one artifact
-`tools/build_guest.sh` doesn't build is this walkthrough's small example:
+`tools/build_both.sh` doesn't build is this walkthrough's small example:
 
 ```bash
 guest/build.sh guest/src/hello.pnk guest/build/hello.elf
@@ -125,15 +126,15 @@ constant-tree regeneration, **934,980 bytes** proof file.
 
 EEST fixture 00000
 (`blockchain_tests/for_amsterdam/amsterdam/eip2780_reduce_intrinsic_tx_gas/authorization_charges/account_write_authority_is_recipient.json`).
-This uses the guest (`guest.elf`, already built by
-Quick Start's `tools/build_guest.sh`) throughout — it's the guest anyone
+This uses the **accelerated** guest (`guest-accel.elf`, already built by
+Quick Start's `tools/build_both.sh`) throughout — it's the guest anyone
 proving a real block cares about; see
 [docs/ZISK-PROVE-BLOCK-FLAPJACK.md](ZISK-PROVE-BLOCK-FLAPJACK.md) for the
 real-block pipeline.
 
 ```bash
 INPUT=work/inputs/00000_test_account_write_authority_is_recipient_fork_Amsterdam-blockchain_test_from_state_test-non-zer.input
-time ~/.zisk/bin/ziskemu -e guest/build/guest.elf -i "$INPUT" -o /tmp/block00000.out -m
+time ~/.zisk/bin/ziskemu -e guest/build/guest-accel.elf -i "$INPUT" -o /tmp/block00000.out -m
 ```
 
 Recorded result: **2,576,557 ZisK steps** (0.18.0: 2,584,624); the dumped
@@ -142,7 +143,7 @@ column exactly, with the rest of the fixed-size output buffer correctly
 zero-padded.
 
 ```bash
-time nice cargo-zisk prove -e guest/build/guest.elf -i "$INPUT" \
+time nice cargo-zisk prove -e guest/build/guest-accel.elf -i "$INPUT" \
   -o work/proof-block00000-accel.json -y
 cargo-zisk verify -p work/proof-block00000-accel.json
 ```

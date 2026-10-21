@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # check_bn254.sh [--seed S] [--pairings N] [--only TYPES] [--steps]
 # Generate alt_bn128 vectors (tools/gen_bn254_vectors.py, py_ecc oracle under the
-# execution-specs uv env), build guest/test/t_bn254.pnk, run it under
-# spike_run, and compare its output records with the oracle.  --steps
-# additionally times single-record inputs (ECADD, ECMUL, 1- and 2-pair pairing
-# checks, empty).  If the aggregate reaches Spike's fixed safety cap, the
-# records are checked one at a time.
+# execution-specs uv env), build software and ZISK_ACCEL guest/test/t_bn254.pnk
+# ELFs, run both under spike_run, and compare their output records with the
+# oracle and each other.  --steps additionally times single-record inputs
+# (ECADD, ECMUL, 1- and 2-pair pairing checks, empty).  If the software
+# aggregate reaches Spike's fixed safety cap, the records are checked one at a
+# time so the reference path remains covered.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SEED=1; PAIRINGS=-1; ONLY=""; STEPS=""
@@ -33,8 +34,10 @@ if [ -n "$ONLY" ]; then
   GEN_ARGS+=(--only "$ONLY")
 fi
 "${PY[@]}" "$ROOT/tools/gen_bn254_vectors.py" "${GEN_ARGS[@]}" "$INP" "$EXP"
-ELF="$W/t_bn254_${TAG}.elf"
-"$ROOT/guest/build.sh" "$ROOT/guest/test/t_bn254.pnk" "$ELF" > /dev/null
+ELF_SW="$W/t_bn254_${TAG}_sw.elf"
+ELF_ACCEL="$W/t_bn254_${TAG}_accel.elf"
+env -u ACCEL "$ROOT/guest/build.sh" "$ROOT/guest/test/t_bn254.pnk" "$ELF_SW" > /dev/null
+ACCEL=1 "$ROOT/guest/build.sh" "$ROOT/guest/test/t_bn254.pnk" "$ELF_ACCEL" > /dev/null
 SPIKE_RUN="${SPIKE_RUN:-$ROOT/tools/spike/spike_run}"
 split_check() {
   local name="$1" elf="$2"
@@ -132,7 +135,17 @@ EOF
   return 1
 }
 
-run_one guest "$ELF"
+run_one sw "$ELF_SW"
+run_one accel "$ELF_ACCEL"
+SW_ACTUAL="$W/t_bn254_${TAG}_sw.actual"
+ACCEL_ACTUAL="$W/t_bn254_${TAG}_accel.actual"
+if cmp -s "$SW_ACTUAL" "$ACCEL_ACTUAL"; then
+  echo "PASS (software/accelerated Spike differential)"
+else
+  echo "FAIL (software/accelerated Spike differential)" >&2
+  cmp "$SW_ACTUAL" "$ACCEL_ACTUAL" || true
+  exit 1
+fi
 
 if [ -n "$STEPS" ]; then
   "${PY[@]}" - "$INP" "$W" "$TAG" <<'EOF'
@@ -158,6 +171,10 @@ EOF
     step="$W/step_${TAG}_${name}.in"
     [ -f "$step" ] || continue
     printf '%-24s ' "$name"
-    SPIKE_OUTPUT_LEN=4096 "$SPIKE_RUN" "$ELF" "$step" "$W/step_${TAG}.out" 2>&1 | tail -1
+    printf 'software: '
+    SPIKE_OUTPUT_LEN=4096 "$SPIKE_RUN" "$ELF_SW" "$step" "$W/step_${TAG}_sw.out" 2>&1 | tail -1
+    printf '%-24s ' ""
+    printf 'accelerated: '
+    SPIKE_OUTPUT_LEN=4096 "$SPIKE_RUN" "$ELF_ACCEL" "$step" "$W/step_${TAG}_accel.out" 2>&1 | tail -1
   done
 fi

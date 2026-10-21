@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # check_bls12381.sh [--seed S] [--only TYPES] [--steps]
-# Generate BLS12-381 vectors, run the guest test under Spike, and compare its
-# output byte-for-byte with the py_ecc oracle.  --steps runs the first record
-# of each operation type separately and reports the instruction count.
+# Generate BLS12-381 vectors, run the software and accelerator builds under
+# Spike, and compare both byte-for-byte with the same py_ecc oracle.  --steps
+# runs the first record of each operation type separately and reports both
+# instruction counts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,8 +46,10 @@ fi
 "${PY[@]}" "$ROOT/tools/gen_bls12381_vectors.py" "${GEN_ARGS[@]}" "$INP" "$EXP"
 
 SPIKE_RUN="${SPIKE_RUN:-$ROOT/tools/spike/spike_run}"
-ELF="$W/t_bls12381_${TAG}.elf"
-"$ROOT/guest/build.sh" "$ROOT/guest/test/t_bls12381.pnk" "$ELF" >/dev/null
+ELF_SW="$W/t_bls12381_${TAG}_sw.elf"
+ELF_ACCEL="$W/t_bls12381_${TAG}_accel.elf"
+"$ROOT/guest/build.sh" "$ROOT/guest/test/t_bls12381.pnk" "$ELF_SW" >/dev/null
+ACCEL=1 "$ROOT/guest/build.sh" "$ROOT/guest/test/t_bls12381.pnk" "$ELF_ACCEL" >/dev/null
 
 run_one() {
   local tag="$1" elf="$2"
@@ -78,7 +81,17 @@ PY
   return 1
 }
 
-run_one guest "$ELF"
+run_one sw "$ELF_SW"
+run_one accel "$ELF_ACCEL"
+SW_ACTUAL="$W/t_bls12381_${TAG}_sw.actual"
+ACCEL_ACTUAL="$W/t_bls12381_${TAG}_accel.actual"
+if cmp -s "$SW_ACTUAL" "$ACCEL_ACTUAL"; then
+  echo "PASS (software/accelerated Spike differential)"
+else
+  echo "FAIL (software/accelerated Spike differential)" >&2
+  cmp "$SW_ACTUAL" "$ACCEL_ACTUAL" || true
+  exit 1
+fi
 
 if [ -n "$STEPS" ]; then
   python3 - "$INP" "$W" "$TAG" <<'PY'
@@ -105,7 +118,9 @@ PY
   for ty in 1 2 3 4 5 6 7 8 9 10 11; do
     step="$W/step_${TAG}_${ty}.in"
     [ -f "$step" ] || continue
-    printf 'steps type %-2s ' "$ty"
-    SPIKE_OUTPUT_LEN=65536 "$SPIKE_RUN" "$ELF" "$step" "$W/step.out" 2>&1 | tail -1
+    printf 'steps type %-2s software:   ' "$ty"
+    SPIKE_OUTPUT_LEN=65536 "$SPIKE_RUN" "$ELF_SW" "$step" "$W/step_sw.out" 2>&1 | tail -1
+    printf 'steps type %-2s accelerated: ' "$ty"
+    SPIKE_OUTPUT_LEN=65536 "$SPIKE_RUN" "$ELF_ACCEL" "$step" "$W/step_accel.out" 2>&1 | tail -1
   done
 fi

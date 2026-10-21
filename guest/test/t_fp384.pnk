@@ -16,7 +16,9 @@
 fun 1 main() {
   mem_init();
   bls_consts_init();
+#ifdef ZISK_ACCEL
   fp_accel_init();
+#endif
   var {1,1} inp = input_blob();
   var {1,1} nq = udivmod(inp.1, CASE_IN);
   var 1 ncase = nq.0;

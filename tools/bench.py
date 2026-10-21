@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Benchmark one or two guests over an EEST manifest.
 
-The first guest is the primary build.  ``--elf2`` adds a second-build column
-(for example a previous revision's ELF).  Every variant is run under Spike for its
+The first guest is the software/reference build.  ``--elf2`` adds an
+accelerated-build column.  Every variant is run under Spike for its
 instruction count and under ziskemu ``-X`` for ZisK STEPS, TOTAL COST, and
 PRECOMPILED COST.  Only fixtures whose Spike output matches the manifest are
 counted in the totals.
 
-With ``--json``, the primary-build metrics retain the historical top-level fields
+With ``--json``, the software metrics retain the historical top-level fields
 used by tools/bench_compare.py.  A paired run additionally stores the
-second build's metrics under each fixture's ``variants`` object.
+accelerated metrics under each fixture's ``variants`` object.
 """
 import argparse
 import csv
@@ -146,10 +146,10 @@ def print_totals(variant, totals):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("elf", help="primary guest ELF")
+    ap.add_argument("elf", help="software/reference guest ELF")
     ap.add_argument("manifest")
     ap.add_argument("--elf2", metavar="ELF",
-                    help="second guest ELF; print paired columns")
+                    help="accelerated guest ELF; print paired columns")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--filter", default="")
     ap.add_argument("--profile", action="store_true",
@@ -161,7 +161,7 @@ def main():
     if args.profile and not os.path.isfile(SPIKE_PROF):
         ap.error(f"--profile requires {SPIKE_PROF}; run tools/spike_prof/build.sh")
     if args.elf2 and not os.path.isfile(args.elf2):
-        ap.error(f"second ELF not found: {args.elf2}")
+        ap.error(f"accelerated ELF not found: {args.elf2}")
 
     manifest_path = os.path.abspath(args.manifest)
     manifest_dir = os.path.dirname(manifest_path)

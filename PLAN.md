@@ -26,7 +26,7 @@ Milestones (each is measured with `tools/eest-run.py` on EEST fixtures):
 - [ ] **M5 performance**: instruction counts vs evm-asm codegen guest / reth
       (spike minstret and ziskemu steps), profile hot spots.
 - [ ] **M6 ZisK accelerators**: keccak/sha256/secp256k1/bn254/bls12/blake2 via ZisK CSRs behind Pancake
-      FFI stubs (keccak done 2026-09-03, see the M6 section).
+      FFI stubs (`ACCEL=1` build; keccak done 2026-09-03, see the M6 section).
 
 ## Pancake constraints that shape the port
 
@@ -83,9 +83,8 @@ memcpy/memcmp/inputcpy/memset, 0x817/0x818 secp256r1 add/dbl. They can be added 
 a0 = p1, a1 = n1, a2 = p2, a3 = n2 (absolute addresses; probed 2026-09-03), running on the shim's C stack.
 An accelerator is therefore a 2-instruction stub in `guest/runtime/start.S` (`csrrs x0, CSR, a0; ret`;
 the shim is assembled with `-march=rv64ima_zicsr`) plus `#ifdef ZISK_ACCEL` in the library; the software
-implementation stayed as the reference and the default build. (Historical: the software build, the
-`ZISK_ACCEL` switch and the `ACCEL=1` build option were removed; the guest is now the accelerated
-build only, and the stubs follow docs/ACCEL-FFI.md.) `alloc` returns 8-aligned pointers; data inside the input blob is not necessarily
+implementation stays as the reference and the default build. `ACCEL=1 guest/build.sh ...` selects the
+accelerated build. `alloc` returns 8-aligned pointers; data inside the input blob is not necessarily
 aligned, so wrappers copy into scratch (the sponge already does).
 
 **Proof of concept (keccak only, fixture 00000):** spike 21.13M → 19.05M instructions, ziskemu cost
@@ -96,8 +95,7 @@ keccak-f 10%, sha256 5%, hashtable/memcpy/memeq ~3%.
 **Verification stance.** Pancake's compiler theorem treats FFI calls as oracle events, so an accelerated
 guest is still a verified compilation of its source; the obligation "CSR 0x8xx computes f" is the same
 one evm-asm takes on in `Rv64/ZiskAccel.lean`. Keeping the software path compiled under `#ifndef
-ZISK_ACCEL` gave a differential test (both builds identical bytes on every fixture); it is gone now
-that the software path is removed.
+ZISK_ACCEL` gives a differential test: both builds must produce identical bytes on every fixture.
 
 **Plan** (issues #37–#41; each PR keeps the default build unchanged and gates on
 `tools/eest-run.py` 30/30 for both builds plus ziskemu parity of the accelerated one):
@@ -177,5 +175,5 @@ PR checklist for those issues:
 * Performance PRs report before/after instruction counts (`tools/bench.py --json` + `tools/bench_compare.py`).
 * Unit tests must call the same `*_init()` functions as `guest/src/main.pnk` (scratch buffers are never
   allocated lazily).
-* Accelerator PRs show identical fixture output on spike and on ziskemu, and agreement with the
-  spec-derived vectors (`tools/check_*.sh`).
+* Accelerator PRs keep the software path under `#ifndef ZISK_ACCEL` and show identical fixture output for
+  both builds on spike and for the accelerated build on ziskemu.

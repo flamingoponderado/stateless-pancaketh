@@ -1,10 +1,11 @@
 import Guest.Model
 
 /-!
-`lake exe run-guest [input] [fuel]`
+`lake exe run-guest [--software] [input] [fuel]`
 
 Runs the guest under flapjack's step-counted stateful-FFI source semantics
-exactly as `Guest.runGuestStepped` defines it, and prints the control result,
+exactly as `Guest.runGuestStepped` defines it (the accelerated build; with
+`--software`, `Guest.runGuestSoftwareStepped`), and prints the control result,
 the step count, and the output region as the guest left it in host memory.
 
 `input` is a guest input as `tools/make-inputs.sh` writes it (the ziskemu
@@ -42,6 +43,8 @@ def outputHex (host : HostMemory) (count : Nat) : String :=
     | none => "??"
 
 def main (args : List String) : IO UInt32 := do
+  let software := args.contains "--software"
+  let args := args.filter (· != "--software")
   let input : InputBlob ← match args[0]? with
     | some path => do
         match unpackInput (← IO.FS.readBinFile ⟨path⟩) with
@@ -51,9 +54,10 @@ def main (args : List String) : IO UInt32 := do
             return 2
     | none => pure []
   let fuel := (args[1]?.bind String.toNat?).getD (2 ^ 40)
-  IO.println s!"guest, input: {input.length} bytes, fuel {fuel}"
+  IO.println s!"{if software then "software" else "accelerated"} guest, input: {input.length} bytes, fuel {fuel}"
   let start ← IO.monoMsNow
-  match runGuestStepped input fuel with
+  let run := if software then runGuestSoftwareStepped else runGuestStepped
+  match run input fuel with
   | none =>
       IO.println s!"run failed (none) after {(← IO.monoMsNow) - start} ms"
       return 1

@@ -24,13 +24,13 @@ test -x "$SPIKE_RUN" || {
 
 evm-asm/scripts/eest-fetch-fixtures.sh "$TAG"
 tools/make-inputs.sh --all "$RUN_ROOT/inputs"
-guest/build.sh guest/src/main.pnk "$RUN_ROOT/guest.elf"
+ACCEL=1 guest/build.sh guest/src/main.pnk "$RUN_ROOT/guest-accel.elf"
 
 set +e
 SPIKE_RUN="$SPIKE_RUN" python3 tools/eest-run.py \
-  "$RUN_ROOT/guest.elf" "$RUN_ROOT/inputs/manifest.tsv" \
+  "$RUN_ROOT/guest-accel.elf" "$RUN_ROOT/inputs/manifest.tsv" \
   --jobs "$JOBS" --quiet-passes \
-  --json "$RUN_ROOT/results.json" --out-dir "$RUN_ROOT/run"
+  --json "$RUN_ROOT/results.json" --out-dir "$RUN_ROOT/run-accel"
 RUN_RC=$?
 set -e
 

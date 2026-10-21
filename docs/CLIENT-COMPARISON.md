@@ -122,7 +122,7 @@ cp work/cmp/pancake-old/build-accel.elf work/cmp/elf/pancake-ca4f557-accel.elf
 cp work/cmp/pancake-old/build-soft.elf  work/cmp/elf/pancake-ca4f557-soft.elf
 unlink work/cmp/pancake-old/.lake && git worktree remove --force work/cmp/pancake-old
 
-tools/build_guest.sh                      # guest/build/guest.elf, current
+tools/build_both.sh                       # guest/build/guest-accel.elf, current
 ```
 
 Experiment A, about 6 minutes:
@@ -131,14 +131,14 @@ Experiment A, about 6 minutes:
 tools/compare-clients.py devnet7 \
   --pancake-elf work/cmp/elf/pancake-ca4f557-accel.elf \
   --pancake-soft-elf work/cmp/elf/pancake-ca4f557-soft.elf \
-  --current-pancake-elf guest/build/guest.elf
+  --current-pancake-elf guest/build/guest-accel.elf
 ```
 
 Experiment B, about 15 minutes (one block runs 13.4 G steps in this guest):
 
 ```bash
 tools/make-inputs.sh --all work/inputs-all        # converts tests-zkevm@v21.0.1
-tools/compare-clients.py corpus --pancake-elf guest/build/guest.elf \
+tools/compare-clients.py corpus --pancake-elf guest/build/guest-accel.elf \
   --match test_requests_exhaust_block_gas test_deposit_high_count \
           test_block_at_rlp_limit_with_logs
 ```
