@@ -31,6 +31,7 @@
 //   SPIKE_WATCH_STOP=1       stop the run after the first watch hit (default: log+continue)
 //   SPIKE_BREAK_PC=<hex>     stop after executing the insn at this PC (logs once)
 //   SPIKE_RUN_DEBUG=1        existing: dump first 60 steps
+//   SPIKE_STEP_CAP=<n>       instruction cap (default 200 billion)
 //   SPIKE_INIT_WRITES=<addr>:<u64>[,<addr>:<u64>...]
 //                            tooling-only LE dword writes after ELF/input load
 //   SPIKE_DUMP_RANGES=<addr:length,...> + SPIKE_DUMP_FILE=<file>
@@ -66,7 +67,7 @@ static const reg_t OUTPUT_ADDR   = 0xa0410000ULL;
 static const size_t DEFAULT_OUTPUT_LEN = 256;
 static const reg_t HANDLER_ADDR  = 0x60000000ULL;
 static const reg_t HALT_FLAG     = 0x60008000ULL;  // handler writes nonzero here on halt
-static const uint64_t STEP_CAP   = 20000000000ULL; // safety cap on total instructions
+static const uint64_t STEP_CAP   = 200000000000ULL; // software BLS can exceed 80 billion
 static const size_t STEP_BATCH   = 2000000;
 
 struct DumpRange {
@@ -566,6 +567,13 @@ int main(int argc, char** argv) {
   }
 
   uint64_t steps_left = STEP_CAP;
+  if (const char* raw = getenv("SPIKE_STEP_CAP")) {
+    steps_left = parse_u64(raw, "SPIKE_STEP_CAP");
+    if (steps_left == 0) {
+      fprintf(stderr, "spike_run: SPIKE_STEP_CAP must be positive\n");
+      return 2;
+    }
+  }
 
   // Headless debug script (SPIKE_DEBUG_CMD) — runs before free-run.
   if (const char* dcmd = getenv("SPIKE_DEBUG_CMD")) {
