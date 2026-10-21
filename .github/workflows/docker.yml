@@ -1,4 +1,4 @@
-name: Docker – EEST ziskemu image
+name: Docker – EEST Spike software image
 
 on:
   workflow_dispatch:
@@ -22,12 +22,10 @@ jobs:
         with:
           submodules: false
 
-      # Only evm-asm is needed (its scripts/); cakeml, flapjack, and
-      # riscv-isa-sim are excluded via .dockerignore and not fetched here --
-      # flapjack is a lake dependency the Dockerfile's own build fetches, and
-      # cakeml/riscv-isa-sim are only needed for Spike/cake, not ziskemu.
-      - name: Initialize evm-asm submodule
-        run: git submodule update --init evm-asm
+      # Docker builds Spike from riscv-isa-sim and converts fixtures with
+      # evm-asm. Flapjack is fetched separately by Lake in the image.
+      - name: Initialize build submodules
+        run: git submodule update --init evm-asm riscv-isa-sim
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -45,7 +43,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=ziskemu-v0.18.0-{{sha}}
+            type=raw,value=spike-software-{{sha}}
             type=raw,value=latest
 
       - name: Build and push
@@ -59,8 +57,6 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
             GIT_REF=${{ github.ref_name }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
-          # GHA layer cache: the ziskemu Rust build and the Lean/flapjack
-          # build are both cached after the first run, so subsequent pushes
-          # are fast.
+          # Cache the Spike and Lean/flapjack build layers.
           cache-from: type=gha
           cache-to: type=gha,mode=max
