@@ -1,7 +1,7 @@
 /* Smoke test for the accelerators that use CakeML's foreign-call convention.
    One @keccakf and one @sha256f call on known inputs; the results are written to
    the output region; tools/accel-ffi-smoke.py runs the compiled program on ziskemu
-   and compares the output with hashlib. */
+   and compares the output with hashlib. Build with ZISK_ACCEL. */
 fun 1 main() {
   var p = @base;
   var i = 0;

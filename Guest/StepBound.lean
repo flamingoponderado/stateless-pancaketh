@@ -6,7 +6,8 @@ import Flapjack.PanValueFfiFuel
 # Goal 1: the guest terminates within a constant number of Pancake steps
 
 The stateless guest (`guest/src/main.pnk`, cpp-expanded by `guest/build.sh`
-whose crypto runs on ZisK accelerators) must terminate, and do so within a fixed number of source-level
+with `ZISK_ACCEL`, i.e. the deployed build whose crypto runs on ZisK
+accelerators) must terminate, and do so within a fixed number of source-level
 Pancake steps, whenever the block it is asked to validate declares a gas limit
 of at most `maxBlockGasLimit` (200M) and the input fits ZisK's input region
 (`maxInputBytes`, 1 GiB minus the framing). The second premise is essential:

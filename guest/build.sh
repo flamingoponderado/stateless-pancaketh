@@ -16,6 +16,9 @@ cpp_debug_args=()
 if [[ "${DEBUG:-0}" == "1" ]]; then
   cpp_debug_args=(-DGUEST_DEBUG)
 fi
+if [[ "${ACCEL:-0}" == "1" ]]; then
+  cpp_debug_args+=(-DZISK_ACCEL)   # ZisK accelerator CSRs via FFI stubs in runtime/start.S
+fi
 "$CPP" "${cpp_debug_args[@]}" -P -w -nostdinc -I "$HERE/src" -x c "$src" | grep -v '^#' > "$b.pp.pnk"
 # COMPILER=flapjack (default) uses the Lean 4 port (lake exe flapjack-compile, pinned by
 # the flapjack lake dependency); COMPILER=cake uses the bootstrapped/prebuilt cake binary
@@ -36,7 +39,14 @@ esac
 # cake's .S uses C-preprocessor macros (cdecl, makesym); run cpp first.
 "$CPP" -P -x assembler-with-cpp "$b.cake.S" > "$b.cake.s"
 "$AS" -march=rv64ima -mno-relax -o "$b.cake.o" "$b.cake.s"
-"$AS" -march=rv64ima_zicsr -mno-relax -o "$b.start.o" "$HERE/runtime/start.S"
+if [[ "${ACCEL:-0}" == "1" ]]; then
+  "$CPP" -DZISK_ACCEL -P -x assembler-with-cpp "$HERE/runtime/start.S" > "$b.start.s"
+  start_march=rv64ima_zicsr
+else
+  "$CPP" -P -x assembler-with-cpp "$HERE/runtime/start.S" > "$b.start.s"
+  start_march=rv64ima
+fi
+"$AS" -march="$start_march" -mno-relax -o "$b.start.o" "$b.start.s"
 "$LD" -T "$HERE/runtime/guest.ld" -nostdlib --no-relax -e _start \
   -o "$out" "$b.start.o" "$b.cake.o"
 echo "built $out"

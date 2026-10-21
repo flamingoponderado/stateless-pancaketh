@@ -1,9 +1,10 @@
 import Guest.Model
 
 /-!
-`lake exe trace-guest [input] [fuel]`
+`lake exe trace-guest [--software] [input] [fuel]`
 
-Debugging aid for `Guest.runGuestStepped`. Runs the guest on `input` (same format as
+Debugging aid for `Guest.runGuestStepped` (with `--software`,
+`Guest.runGuestSoftwareStepped`). Runs the guest on `input` (same format as
 `run-guest`); if the run fails (`none`) or ends in an uncaught exception,
 re-executes the guest statement by statement, descending into the call that
 fails or raises, down to the leaf statement, and prints the call chain with
@@ -200,6 +201,8 @@ def unpackInput (bytes : ByteArray) : Except String InputBlob := do
   pure ((bytes.extract 8 (8 + length)).toList.map fun byte => BitVec.ofNat 8 byte.toNat)
 
 def main (args : List String) : IO UInt32 := do
+  let software := args.contains "--software"
+  let args := args.filter (· != "--software")
   let input : InputBlob ← match args[0]? with
     | some path => do
         match unpackInput (← IO.FS.readBinFile ⟨path⟩) with
@@ -209,7 +212,7 @@ def main (args : List String) : IO UInt32 := do
             return 2
     | none => pure []
   let fuel := (args[1]?.bind String.toNat?).getD (2 ^ 40)
-  let program := guestAst
+  let program := if software then Software.guestAst else guestAst
   let some st := evalPanValueDeclarations guestInitialState program (some guestMemoryAccess)
     | do IO.println "declarations failed"; return 1
   let ctx : Ctx := { st, fuel }

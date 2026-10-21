@@ -12,12 +12,12 @@ guest compiled by `flapjack` (the Lean 4 port of the Pancake compiler,
 guest-build and toolchain prerequisites. This document only adds the
 real-block-specific steps below.
 
-This uses the guest (`guest.elf`, already built by Quick Start's
-`tools/build_guest.sh`). `nice` is used
+This uses the **accelerated** guest (`guest-accel.elf`, `ACCEL=1` build,
+already built by Quick Start's `tools/build_both.sh`). `nice` is used
 throughout, per the same CPU-load note as
 [docs/ZISK-PROVE-FLAPJACK.md](ZISK-PROVE-FLAPJACK.md).
 
-The flapjack-compiled `guest.elf` was checked for correctness on this
+The flapjack-compiled `guest-accel.elf` was checked for correctness on this
 exact block before proving; see
 [docs/FLAPJACK-CORRECTNESS.md](FLAPJACK-CORRECTNESS.md).
 
@@ -70,7 +70,7 @@ printf '%s  %s\n' \
   work/gist/115260-115269.tar.zst | sha256sum -c -
 tar --zstd -xf work/gist/115260-115269.tar.zst -C work/gist/archive
 
-COMPILER=flapjack guest/build.sh guest/src/main.pnk guest/build/guest.elf
+ACCEL=1 COMPILER=flapjack guest/build.sh guest/src/main.pnk guest/build/guest-accel.elf
 
 python3 evm-asm/scripts/eest-stateless-to-input.py \
   --fixtures-dir work/gist/archive/blockchain_tests \
@@ -87,7 +87,7 @@ guest, since this step doesn't touch the guest at all.
 
 ```bash
 INPUT=work/gist/inputs/00000_block_115260_3c8d1842a0538d9f67a091fc4b7ab007be665735c2b0ddebeb5a313c382f0764_b0.input
-time ~/.zisk/bin/ziskemu -e guest/build/guest.elf -i "$INPUT" \
+time ~/.zisk/bin/ziskemu -e guest/build/guest-accel.elf -i "$INPUT" \
   -o work/gist/accelerated-zisk.out -X
 ```
 
@@ -109,7 +109,7 @@ than `cargo-zisk`'s default internal timeout allows, so raise it via
 
 ```bash
 PROOFMAN_SETTLE_TIMEOUT_S=14400 time nice -n 15 cargo-zisk prove \
-  -e guest/build/guest.elf -i "$INPUT" \
+  -e guest/build/guest-accel.elf -i "$INPUT" \
   -o work/proof-block115260.json -y
 cargo-zisk verify -p work/proof-block115260.json
 ```
@@ -157,6 +157,7 @@ OOM-killed by unrelated load spikes on this shared host).
   synthetic EEST test case — see
   [docs/ZISK-PROVE-FLAPJACK.md](ZISK-PROVE-FLAPJACK.md) for the
   smaller/faster fixture-based walkthrough.
+* The *software* guest was not proved here.
 * `work/gist/archive`, `work/gist/inputs`, and the proof file are left out
   of version control (large, regenerable); this doc is the reproducible
   record.

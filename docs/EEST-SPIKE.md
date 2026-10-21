@@ -3,7 +3,8 @@
 This is the complete `tests-zkevm` stateless-fixture run, not the small
 `tools/check_all.sh` sample. `tools/eest-run.py` compares each guest result
 with the fixture's `statelessOutputBytes` and reports root, success, and tail
-regions. The guest's crypto runs on the accelerator CSRs, which Spike implements, and
+regions. The command below uses the accelerated guest under Spike: `ACCEL=1`
+selects the same precompile acceleration points that Spike implements, while
 the runner itself remains Spike-only. No ziskemu is needed. The guest is
 built with `flapjack` (`guest/build.sh`'s default `COMPILER`); pass
 `COMPILER=cake` instead to use a bootstrapped/prebuilt CakeML `cake` binary.
@@ -58,12 +59,12 @@ There were no fixture failures. The commit-qualified run directory and result
 JSON are the reproducible record for this passing revision; the tracked
 `tools/eest-baseline.json` is not used by this command.
 
-The same guest (the same ELF: sha256
+The same accelerated guest (the same ELF: sha256
 `1181171037da6360b54665ad0ff6840572d03d1ac69178076302599c3914a6a9`) was also
 run over the same 33,614 inputs under `ziskemu 1.3.0-alpha`:
 
 ```bash
-python3 tools/eest-run.py work/eest-spike-<commit>/guest.elf \
+python3 tools/eest-run.py work/eest-spike-<commit>/guest-accel.elf \
   work/eest-spike-<commit>/inputs/manifest.tsv --ziskemu --quiet-passes
 ```
 

@@ -55,11 +55,21 @@
 /* Constants: FQ_R2 = R^2 mod p, FQ_R3 = R^3 mod p for R = 2^256; FQ_ONE is 1 (canonical) */
 #define FQ_R2 <-924086354343953783, -5339271268858002949, 5164255478447964150, 493319470278259999>
 #define FQ_R3 <-5634726956725096225, 7129779742913871286, -1189219630252946693, 2377177743836652868>
+#ifdef ZISK_ACCEL
 #define FQ_ONE <1, 0, 0, 0>
 #define FQ_THREE <3, 0, 0, 0>
 #define FQ_82 <82, 0, 0, 0>
 /* 82^-1 mod BN_P; avoids a one-time binary-Euclid walk during init. */
 #define BN_INV82 <2101474240800967975, -6528550383122280258, -6649978986918917939, 1148157965898539121>
+#else
+#define FQ_ONE <-3216340282688729699, 754611498739239741, 7381016538464732716, 1011752739694698287>
+#define FQ_THREE <8797723225643362519, 2263834496217719225, 3696305541684646532, 3035258219084094862>
+#define FQ_82 <5544790254283102953, -4748271689278134499, 4628036095437277618, 2762764518496934255>
+#define FQ_M18 <-8343894052472685920, -3420494331567672074, 2169086236411634456, 2710440286313254821>
+/* b2 = 3 / (9 + i) (twist coefficient), Montgomery form */
+#define FQ_B2_RE <4321547867055981224, 147241268046680925, 2789960110459671136, 2671978398120978541>
+#define FQ_B2_IM <4100506350182530919, 7345568344173317438, -2933584034067119958, 90557763186888013>
+#endif
 /* 32-bit digits of p and -p^-1 mod 2^32 */
 #define BN_N0 3632069959
 #define BN_N1 1008765974
@@ -82,6 +92,7 @@ var 1 bn_gamma = 0;      /* 6 Fq2: gamma^k, k = 0..5 */
 var 1 bn_expw = 0;       /* 44 words: (p^12 - 1) / r, little-endian */
 #define BN_EXP_WORDS 44
 
+#ifdef ZISK_ACCEL
 /* The 0x802 and 0x808-0x80a CSRs consume canonical residues and mutate their
    first operand.  These buffers are allocated once, before any caller takes a
    heap mark. */
@@ -204,15 +215,19 @@ fun 1 bn254_accel_fill_gamma(1 dst) {
   }
   return 0;
 }
+#endif
 
 fun 1 bn254_init() {
   if bn_gamma != 0 {
     return 0;
   }
+#ifdef ZISK_ACCEL
   bn254_accel_init();
+#endif
   bn_gamma = alloc(6 * 64);
   st bn_gamma, FQ_ONE;
   st bn_gamma + 32, U256_ZERO;
+#ifdef ZISK_ACCEL
   /* Canonical gamma^1..gamma^5; generated once from (9+i)^((p-1)/6). */
   st bn_gamma + 64, <-3023263510725794704, 6652412619979170166, -1677133612687389856, 1334392721173227487>;
   st bn_gamma + 96, <-3864950087214734676, 8392900422778406885, -6470972283911074930, 2623794231377586150>;
@@ -224,6 +239,19 @@ fun 1 bn254_init() {
   st bn_gamma + 288, <-4522943258981334746, 3928778152882390883, -6973119578636608366, 3176267935786044142>;
   st bn_gamma + 320, <3360468246954731823, 4781773437820083155, -1640939321228443660, 109144015201994313>;
   st bn_gamma + 352, <2650008764942134347, -5728354866287465792, -6737470500459339907, 1345717340070545013>;
+#else
+  st bn_gamma + 64, <-5792853331649738489, -3860959873505183862, 1278438861261381767, 212598772761311868>;
+  st bn_gamma + 96, <-6763652223730111118, -3454539484322995877, -2580576182942578394, 1200023580730561873>;
+  st bn_gamma + 128, <-5370759089546351824, 3782902503040509012, 8791150885551868305, 1825854335138010348>;
+  st bn_gamma + 160, <7963664994991228759, -6188936077517483711, -5267219463788246470, 2767831111890561987>;
+  st bn_gamma + 192, <-1964733768116292055, -4958197782747563317, 3578621962720924518, 2681173117283399901>;
+  st bn_gamma + 224, <-6784816993305462841, 553939530661941723, 7860678177968807019, 3208568454732775116>;
+  st bn_gamma + 256, <8314163329781907090, -6504557050910731781, -7164066810663394407, 1576150870752482284>;
+  st bn_gamma + 288, <6763840483288992073, 7118829427391486816, 4016233444936635065, 2630958277570195709>;
+  st bn_gamma + 320, <-3931526823012659225, -2143656105628579061, 3656613296917993960, 1345095164996126785>;
+  st bn_gamma + 352, <957117326806663081, 367382125163301975, -3192871766334041867, 3396254757538665050>;
+#endif
+#ifdef ZISK_ACCEL
   bn_b2 = alloc(64);
   var U256 inv82 = BN_INV82;
   var U256 b2r = fq_mul(<27, 0, 0, 0>, inv82);
@@ -231,6 +259,7 @@ fun 1 bn254_init() {
   var U256 b2i = fq_neg(b2i0);
   st bn_b2, b2r;
   st bn_b2 + 32, b2i;
+#endif
   bn_expw = alloc(BN_EXP_WORDS * 8);
   st bn_expw, -8748722329853955808;
   st bn_expw + 8, 4658111487712502692;
@@ -308,6 +337,7 @@ fun U256 fq_neg(U256 a) {
   return u256_sub(BN_P, a);
 }
 
+#ifdef ZISK_ACCEL
 
 /* The accelerator build stores canonical residues, so arith256_mod is the
    field product directly. */
@@ -315,20 +345,126 @@ fun U256 fq_mul(U256 a, U256 b) {
   return bn254_accel_modmul(a, b);
 }
 
+#else
+
+/* Montgomery product a * b * 2^-256 mod p on 32-bit digits (product scanning).
+   Column k accumulates the a_i b_j and m_i n_j (i + j = k) as L (sum of low
+   halves) and H (sum of high halves); in the first 8 columns the digit is
+   cancelled by choosing m_k = digit * (-p^-1) mod 2^32 and adding m_k n_0;
+   the last 8 columns emit the result digits.  a, b < p gives a result < 2p,
+   reduced by one conditional subtraction. */
+#define BN_PRD(x, y) pr = (x) * (y); L = L + (pr & M32); H = H + (pr >>> 32);
+#define BN_MCOL(mk) col = L + c; dg = col & M32; mk = (dg * BN_NINV) & M32; pr = mk * BN_N0; col2 = dg + (pr & M32); c = (col >>> 32) + H + (col2 >>> 32) + (pr >>> 32); L = 0; H = 0;
+#define BN_UCOL(uk) col = L + c; uk = col & M32; c = (col >>> 32) + H; L = 0; H = 0;
+fun U256 fq_mul(U256 a, U256 b) {
+  var a0 = a.0 & M32;
+  var a1 = a.0 >>> 32;
+  var a2 = a.1 & M32;
+  var a3 = a.1 >>> 32;
+  var a4 = a.2 & M32;
+  var a5 = a.2 >>> 32;
+  var a6 = a.3 & M32;
+  var a7 = a.3 >>> 32;
+  var b0 = b.0 & M32;
+  var b1 = b.0 >>> 32;
+  var b2 = b.1 & M32;
+  var b3 = b.1 >>> 32;
+  var b4 = b.2 & M32;
+  var b5 = b.2 >>> 32;
+  var b6 = b.3 & M32;
+  var b7 = b.3 >>> 32;
+  var pr = 0;
+  var L = 0;
+  var H = 0;
+  var c = 0;
+  var col = 0;
+  var col2 = 0;
+  var dg = 0;
+  var m0 = 0; var m1 = 0; var m2 = 0; var m3 = 0;
+  var m4 = 0; var m5 = 0; var m6 = 0; var m7 = 0;
+  var u0 = 0; var u1 = 0; var u2 = 0; var u3 = 0;
+  var u4 = 0; var u5 = 0; var u6 = 0;
+  BN_PRD(a0, b0)
+  BN_MCOL(m0)
+  BN_PRD(a0, b1) BN_PRD(a1, b0)
+  BN_PRD(m0, BN_N1)
+  BN_MCOL(m1)
+  BN_PRD(a0, b2) BN_PRD(a1, b1) BN_PRD(a2, b0)
+  BN_PRD(m0, BN_N2) BN_PRD(m1, BN_N1)
+  BN_MCOL(m2)
+  BN_PRD(a0, b3) BN_PRD(a1, b2) BN_PRD(a2, b1) BN_PRD(a3, b0)
+  BN_PRD(m0, BN_N3) BN_PRD(m1, BN_N2) BN_PRD(m2, BN_N1)
+  BN_MCOL(m3)
+  BN_PRD(a0, b4) BN_PRD(a1, b3) BN_PRD(a2, b2) BN_PRD(a3, b1) BN_PRD(a4, b0)
+  BN_PRD(m0, BN_N4) BN_PRD(m1, BN_N3) BN_PRD(m2, BN_N2) BN_PRD(m3, BN_N1)
+  BN_MCOL(m4)
+  BN_PRD(a0, b5) BN_PRD(a1, b4) BN_PRD(a2, b3) BN_PRD(a3, b2) BN_PRD(a4, b1) BN_PRD(a5, b0)
+  BN_PRD(m0, BN_N5) BN_PRD(m1, BN_N4) BN_PRD(m2, BN_N3) BN_PRD(m3, BN_N2) BN_PRD(m4, BN_N1)
+  BN_MCOL(m5)
+  BN_PRD(a0, b6) BN_PRD(a1, b5) BN_PRD(a2, b4) BN_PRD(a3, b3) BN_PRD(a4, b2) BN_PRD(a5, b1) BN_PRD(a6, b0)
+  BN_PRD(m0, BN_N6) BN_PRD(m1, BN_N5) BN_PRD(m2, BN_N4) BN_PRD(m3, BN_N3) BN_PRD(m4, BN_N2) BN_PRD(m5, BN_N1)
+  BN_MCOL(m6)
+  BN_PRD(a0, b7) BN_PRD(a1, b6) BN_PRD(a2, b5) BN_PRD(a3, b4) BN_PRD(a4, b3) BN_PRD(a5, b2) BN_PRD(a6, b1) BN_PRD(a7, b0)
+  BN_PRD(m0, BN_N7) BN_PRD(m1, BN_N6) BN_PRD(m2, BN_N5) BN_PRD(m3, BN_N4) BN_PRD(m4, BN_N3) BN_PRD(m5, BN_N2) BN_PRD(m6, BN_N1)
+  BN_MCOL(m7)
+  BN_PRD(a1, b7) BN_PRD(a2, b6) BN_PRD(a3, b5) BN_PRD(a4, b4) BN_PRD(a5, b3) BN_PRD(a6, b2) BN_PRD(a7, b1)
+  BN_PRD(m1, BN_N7) BN_PRD(m2, BN_N6) BN_PRD(m3, BN_N5) BN_PRD(m4, BN_N4) BN_PRD(m5, BN_N3) BN_PRD(m6, BN_N2) BN_PRD(m7, BN_N1)
+  BN_UCOL(u0)
+  BN_PRD(a2, b7) BN_PRD(a3, b6) BN_PRD(a4, b5) BN_PRD(a5, b4) BN_PRD(a6, b3) BN_PRD(a7, b2)
+  BN_PRD(m2, BN_N7) BN_PRD(m3, BN_N6) BN_PRD(m4, BN_N5) BN_PRD(m5, BN_N4) BN_PRD(m6, BN_N3) BN_PRD(m7, BN_N2)
+  BN_UCOL(u1)
+  BN_PRD(a3, b7) BN_PRD(a4, b6) BN_PRD(a5, b5) BN_PRD(a6, b4) BN_PRD(a7, b3)
+  BN_PRD(m3, BN_N7) BN_PRD(m4, BN_N6) BN_PRD(m5, BN_N5) BN_PRD(m6, BN_N4) BN_PRD(m7, BN_N3)
+  BN_UCOL(u2)
+  BN_PRD(a4, b7) BN_PRD(a5, b6) BN_PRD(a6, b5) BN_PRD(a7, b4)
+  BN_PRD(m4, BN_N7) BN_PRD(m5, BN_N6) BN_PRD(m6, BN_N5) BN_PRD(m7, BN_N4)
+  BN_UCOL(u3)
+  BN_PRD(a5, b7) BN_PRD(a6, b6) BN_PRD(a7, b5)
+  BN_PRD(m5, BN_N7) BN_PRD(m6, BN_N6) BN_PRD(m7, BN_N5)
+  BN_UCOL(u4)
+  BN_PRD(a6, b7) BN_PRD(a7, b6)
+  BN_PRD(m6, BN_N7) BN_PRD(m7, BN_N6)
+  BN_UCOL(u5)
+  BN_PRD(a7, b7)
+  BN_PRD(m7, BN_N7)
+  BN_UCOL(u6)
+  /* the remaining carry is digit 7 (result < 2p < 2^255, so c < 2^31) */
+  var U256 r = <u0 | (u1 << 32), u2 | (u3 << 32), u4 | (u5 << 32), u6 | (c << 32)>;
+  var 1 lt = u256_lt(r, BN_P);
+  if lt == 0 {
+    return u256_sub(r, BN_P);
+  }
+  return r;
+}
+
+#endif
 
 /* x (< p) -> the internal Fq representation, and back. */
 fun U256 fq_to_mont(U256 x) {
+#ifdef ZISK_ACCEL
   return x;
+#else
+  return fq_mul(x, FQ_R2);
+#endif
 }
 
 fun U256 fq_from_mont(U256 x) {
+#ifdef ZISK_ACCEL
   return x;
+#else
+  return fq_mul(x, <1, 0, 0, 0>);
+#endif
 }
 
 /* a^-1 in the internal representation (0 for 0, like py_ecc
    prime_field_inv). */
 fun U256 fq_inv(U256 a) {
+#ifdef ZISK_ACCEL
   return modinv_bin(a, BN_P);
+#else
+  var U256 i = modinv_bin(a, BN_P);
+  return fq_mul(i, FQ_R3);
+#endif
 }
 
 /* k * a for a small constant k (< 2^63) by a doubling chain. */
@@ -349,8 +485,24 @@ fun U256 fq_mul_small(U256 a, 1 k) {
 
 /* d = a * b (py_ecc FQP degree-2 product: (a0 b0 - a1 b1, a0 b1 + a1 b0)). */
 fun 1 fq2_mul(1 d, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   bn254_accel_fp2_mul(d, a, b);
   return 0;
+#else
+  var U256 a0 = lds U256 a;
+  var U256 a1 = lds U256 (a + 32);
+  var U256 b0 = lds U256 b;
+  var U256 b1 = lds U256 (b + 32);
+  var U256 t0 = fq_mul(a0, b0);
+  var U256 t1 = fq_mul(a1, b1);
+  var U256 t2 = fq_mul(a0, b1);
+  var U256 t3 = fq_mul(a1, b0);
+  var U256 r0 = fq_sub(t0, t1);
+  var U256 r1 = fq_add(t2, t3);
+  st d, r0;
+  st d + 32, r1;
+  return 0;
+#endif
 }
 
 /* ---------- Fq12 = Fq[w]/(w^12 - 18 w^6 + 82), 12 coefficients in memory ---------- */
@@ -467,10 +619,12 @@ fun 1 fe_sqr(1 fld, 1 d, 1 a) {
 
 /* Coefficientwise operations (identical for all three fields). */
 fun 1 fe_add(1 fld, 1 d, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   if fld == 2 {
     bn254_accel_fp2_add(d, a, b);
     return 0;
   }
+#endif
   var i = 0;
   while i <+ fld {
     var U256 x = lds U256 (a + i * 32);
@@ -483,10 +637,12 @@ fun 1 fe_add(1 fld, 1 d, 1 a, 1 b) {
 }
 
 fun 1 fe_sub(1 fld, 1 d, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   if fld == 2 {
     bn254_accel_fp2_sub(d, a, b);
     return 0;
   }
+#endif
   var i = 0;
   while i <+ fld {
     var U256 x = lds U256 (a + i * 32);
@@ -553,6 +709,7 @@ fun 1 ecp_is_inf(1 fld, 1 pt) {
   return fe_is_zero(fld, pt + 2 * FE_SZ(fld));
 }
 
+#ifdef ZISK_ACCEL
 fun 1 bn254_accel_g1_double(1 out, U256 x, U256 y) {
   bn254_accel_init();
   st bn_accel_g1_p1, x;
@@ -580,10 +737,12 @@ fun 1 bn254_accel_g1_add(1 out, U256 x1, U256 y1, U256 x2, U256 y2) {
   st out + 64, FQ_ONE;
   return 0;
 }
+#endif
 
 /* out = 2 pt (py_ecc optimized_curve.double); out may alias pt. */
 fun 1 ecp_double(1 fld, 1 out, 1 pt) {
   var esz = FE_SZ(fld);
+#ifdef ZISK_ACCEL
   if fld == 1 {
     var U256 z1 = lds U256 (pt + 64);
     var 1 z1z = u256_is_zero(z1);
@@ -607,6 +766,7 @@ fun 1 ecp_double(1 fld, 1 out, 1 pt) {
     bn254_accel_g1_double(out, x1, y1);
     return 0;
   }
+#endif
   var mark = heap_mark();
   var x = pt;
   var y = pt + esz;
@@ -647,6 +807,7 @@ fun 1 ecp_double(1 fld, 1 out, 1 pt) {
 
 /* out = p1 + p2 (py_ecc optimized_curve.add); out may alias p1 or p2. */
 fun 1 ecp_add(1 fld, 1 out, 1 p1, 1 p2) {
+#ifdef ZISK_ACCEL
   if fld == 1 {
     var U256 z1 = lds U256 (p1 + 64);
     var 1 z1z = u256_is_zero(z1);
@@ -694,6 +855,7 @@ fun 1 ecp_add(1 fld, 1 out, 1 p1, 1 p2) {
     bn254_accel_g1_add(out, x1, y1, x2, y2);
     return 0;
   }
+#endif
   var esz = FE_SZ(fld);
   var 1 z1z = fe_is_zero(fld, p1 + 2 * esz);
   if z1z == 1 {
@@ -952,8 +1114,12 @@ fun 1 fq12_inv(1 d, 1 a) {
   var tmp = alloc(416);
   memzero(r0, 416);
   st r0, FQ_82;
+#ifdef ZISK_ACCEL
   var U256 m18 = fq_neg(<18, 0, 0, 0>);
   st r0 + 192, m18;
+#else
+  st r0 + 192, FQ_M18;
+#endif
   st r0 + 384, FQ_ONE;
   memzero(r1, 416);
   memcpy(r1, a, FQ12_BYTES);
@@ -1189,7 +1355,12 @@ fun 1 bn254_parse_g2(1 data, 1 out) {
   var t1 = alloc(64);
   var t2 = alloc(64);
   var b2 = alloc(64);
+#ifdef ZISK_ACCEL
   memcpy(b2, bn_b2, 64);
+#else
+  st b2, FQ_B2_RE;
+  st b2 + 32, FQ_B2_IM;
+#endif
   fq2_mul(t1, out + 64, out + 64);        /* y^2 */
   fq2_mul(t2, out, out);
   fq2_mul(t2, t2, out);                   /* x^3 */

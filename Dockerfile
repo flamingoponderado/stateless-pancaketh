@@ -1,4 +1,4 @@
-# Bakes in the flapjack-compiled guest and the
+# Bakes in the flapjack-compiled guest (software + accelerated) and the
 # full EEST tests-zkevm fixture corpus, ready to run under ziskemu with no
 # further network access. See evm-asm/Dockerfile for the sibling image this
 # mirrors (same ziskemu-from-source pattern, same license-collection style).
@@ -104,10 +104,10 @@ COPY . .
 # dependencies pinned in lakefile.toml/lake-manifest.json on first use.
 RUN elan toolchain install "$(cat lean-toolchain)"
 
-# Build the ZisK-accelerated guest ELF with flapjack
+# Build the software and ZisK-accelerated guest ELFs with flapjack
 # (guest/build.sh's default COMPILER). This is what populates
 # .lake/packages/ (flapjack, riscv-zkvm), collected below.
-RUN tools/build_guest.sh
+RUN tools/build_both.sh
 
 # Collect license files from each Lean package lake fetched into .lake/packages/
 RUN mkdir -p /usr/local/share/licenses/lean-packages \
@@ -159,9 +159,9 @@ LABEL eest.fixture.tag="${EEST_TAG}"
 
 ENV ZISKEMU=/usr/local/bin/ziskemu
 
-# Defaults to the guest against the full corpus; override CMD (e.g.
-# `docker run IMAGE guest/build/guest.elf work/inputs/manifest.tsv
-# --ziskemu --quiet-passes --jobs 4`) to pass eest-run.py options like
-# --json/--filter/--jobs.
+# Defaults to the accelerated guest against the full corpus; override CMD
+# (e.g. `docker run IMAGE guest/build/guest.elf work/inputs/manifest.tsv
+# --ziskemu --quiet-passes --jobs 4`) to run the software guest instead, or
+# to pass eest-run.py options like --json/--filter/--jobs.
 ENTRYPOINT ["python3", "tools/eest-run.py"]
-CMD ["guest/build/guest.elf", "work/inputs/manifest.tsv", "--ziskemu", "--quiet-passes"]
+CMD ["guest/build/guest-accel.elf", "work/inputs/manifest.tsv", "--ziskemu", "--quiet-passes"]

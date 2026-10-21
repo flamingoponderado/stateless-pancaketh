@@ -4,7 +4,7 @@ import Guest.Basic
 /-!
 # Reference semantics of the ZisK accelerators on word memory
 
-The guest does its crypto with foreign
+The `ZISK_ACCEL` build of the guest replaces its software crypto with foreign
 calls that `guest/runtime/start.S` turns into `csrrs` on ZisK precompile CSRs.
 Each accelerator reads operands through pointers in a parameter block and
 writes its result back into memory. The semantics below are those of

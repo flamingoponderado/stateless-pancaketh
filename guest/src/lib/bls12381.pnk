@@ -77,6 +77,7 @@ fun 1 fp2_eq(1 a, 1 b) {
   return fp_eq(a1, b1);
 }
 
+#ifdef ZISK_ACCEL
 
 /* The Fp2 CSRs mutate their first 96-byte operand in place.  Use a private
    pair of buffers so all three public helpers remain alias-safe (including
@@ -98,23 +99,48 @@ fun 1 fp2_accel_init() {
   return 0;
 }
 
+#endif
 
 fun 1 fp2_add(1 r, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   fp2_accel_init();
   fp2_copy(fp2_accel_f1, a);
   fp2_copy(fp2_accel_f2, b);
   @bls_fp2_add(fp2_accel_params, 0, fp2_accel_params, 192);
   fp2_copy(r, fp2_accel_f1);
   return 0;
+#else
+  var FP a0 = lds FP a;
+  var FP a1 = lds FP (a + 48);
+  var FP b0 = lds FP b;
+  var FP b1 = lds FP (b + 48);
+  var FP c0 = fp_add(a0, b0);
+  var FP c1 = fp_add(a1, b1);
+  st r, c0;
+  st r + 48, c1;
+  return 0;
+#endif
 }
 
 fun 1 fp2_sub(1 r, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   fp2_accel_init();
   fp2_copy(fp2_accel_f1, a);
   fp2_copy(fp2_accel_f2, b);
   @bls_fp2_sub(fp2_accel_params, 0, fp2_accel_params, 192);
   fp2_copy(r, fp2_accel_f1);
   return 0;
+#else
+  var FP a0 = lds FP a;
+  var FP a1 = lds FP (a + 48);
+  var FP b0 = lds FP b;
+  var FP b1 = lds FP (b + 48);
+  var FP c0 = fp_sub(a0, b0);
+  var FP c1 = fp_sub(a1, b1);
+  st r, c0;
+  st r + 48, c1;
+  return 0;
+#endif
 }
 
 fun 1 fp2_neg(1 r, 1 a) {
@@ -143,12 +169,30 @@ fun 1 fp2_conj(1 r, 1 a) {
 
 /* (a0 + a1 u)(b0 + b1 u) = (a0 b0 - a1 b1) + ((a0 + a1)(b0 + b1) - a0 b0 - a1 b1) u */
 fun 1 fp2_mul(1 r, 1 a, 1 b) {
+#ifdef ZISK_ACCEL
   fp2_accel_init();
   fp2_copy(fp2_accel_f1, a);
   fp2_copy(fp2_accel_f2, b);
   @bls_fp2_mul(fp2_accel_params, 0, fp2_accel_params, 192);
   fp2_copy(r, fp2_accel_f1);
   return 0;
+#else
+  var FP a0 = lds FP a;
+  var FP a1 = lds FP (a + 48);
+  var FP b0 = lds FP b;
+  var FP b1 = lds FP (b + 48);
+  var FP t0 = fp_mul(a0, b0);
+  var FP t1 = fp_mul(a1, b1);
+  var FP sa = fp_add(a0, a1);
+  var FP sb = fp_add(b0, b1);
+  var FP t2 = fp_mul(sa, sb);
+  var FP c0 = fp_sub(t0, t1);
+  t2 = fp_sub(t2, t0);
+  t2 = fp_sub(t2, t1);
+  st r, c0;
+  st r + 48, t2;
+  return 0;
+#endif
 }
 
 /* (a0 + a1 u)^2 = (a0 + a1)(a0 - a1) + 2 a0 a1 u */
@@ -536,6 +580,7 @@ fun 1 fp12_final_exp(1 r, 1 f) {
 #define G1Y(p) ((p) + 48)
 #define G1Z(p) ((p) + 96)
 
+#ifdef ZISK_ACCEL
 
 /* The curve CSRs operate on affine x || y buffers and mutate p1.  G1's
    public/projective carrier remains 144 bytes so the reference and
@@ -557,6 +602,7 @@ fun 1 bls_g1_accel_init() {
   return 0;
 }
 
+#endif
 
 fun 1 g1_set_inf(1 r) {
   st G1X(r), FP_ONE_MONT;
@@ -593,6 +639,7 @@ fun 1 g1_double(1 r, 1 p) {
   var FP x = lds FP G1X(p);
   var FP y = lds FP G1Y(p);
   var FP z = lds FP G1Z(p);
+#ifdef ZISK_ACCEL
   var 1 zaff = fp_eq(z, FP_ONE_MONT);
   if zaff == 1 {
     var 1 yz = fp_is_zero(y);
@@ -609,6 +656,7 @@ fun 1 g1_double(1 r, 1 p) {
     st G1Z(r), FP_ONE_MONT;
     return 0;
   }
+#endif
   var FP w = fp_sqr(x);
   var FP w2 = fp_add(w, w);
   w = fp_add(w2, w);
@@ -662,6 +710,7 @@ fun 1 g1_add(1 r, 1 p1, 1 p2) {
   var FP y1 = lds FP G1Y(p1);
   var FP x2 = lds FP G1X(p2);
   var FP y2 = lds FP G1Y(p2);
+#ifdef ZISK_ACCEL
   var 1 z1aff = fp_eq(z1, FP_ONE_MONT);
   var 1 z2aff = fp_eq(z2, FP_ONE_MONT);
   if (z1aff == 1) && (z2aff == 1) {
@@ -686,6 +735,7 @@ fun 1 g1_add(1 r, 1 p1, 1 p2) {
     st G1Z(r), FP_ONE_MONT;
     return 0;
   }
+#endif
   var FP u1 = fp_mul(y2, z1);
   var FP u2 = fp_mul(y1, z2);
   var FP v1 = fp_mul(x2, z1);
@@ -729,6 +779,7 @@ fun 1 g1_mul(1 r, 1 p, 1 kptr, 1 n) {
   var mark = heap_mark();
   var acc = alloc(G1_BYTES);
   var base = alloc(G1_BYTES);
+#ifdef ZISK_ACCEL
   var 1 pinf = g1_is_inf(p);
   if pinf == 1 {
     g1_set_inf(base);
@@ -745,6 +796,9 @@ fun 1 g1_mul(1 r, 1 p, 1 kptr, 1 n) {
       st G1Z(base), FP_ONE_MONT;
     }
   }
+#else
+  g1_copy(base, p);
+#endif
   g1_set_inf(acc);
   var i = n * 64;
   var started = 0;
@@ -1675,12 +1729,14 @@ fun 1 kzg_verify(1 commitment, 1 zb, 1 yb, 1 proof) {
 
 fun 1 bls_lib_init() {
   bls_consts_init();
+#ifdef ZISK_ACCEL
   /* These arenas must be promoted before any caller takes a scratch mark;
      heap_release restores the mark, so lazy initialization inside a group or
      pairing operation would leave dangling accelerator pointers. */
   fp_accel_init();
   fp2_accel_init();
   bls_g1_accel_init();
+#endif
   return 0;
 }
 
