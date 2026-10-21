@@ -51,6 +51,17 @@ can run it, as an alternative to evm-asm's hand-written/codegen RV64 guest.
 
 ## Docker
 
+To build this branch's software guest image, initialize the Spike and fixture
+converter submodules, then build and run the image. The image compiles only
+`guest/build/guest.elf` and uses a Spike driver without ZisK precompile CSR
+extensions:
+
+```bash
+git submodule update --init evm-asm riscv-isa-sim
+docker build -t stateless-pancaketh-eest-spike .
+docker run --rm stateless-pancaketh-eest-spike
+```
+
 A pre-built image bakes in `ziskemu`, the flapjack-compiled accelerated guest,
 and the full `tests-zkevm` EEST fixture
 corpus, so you can reproduce a conformance run with one `docker run` — no

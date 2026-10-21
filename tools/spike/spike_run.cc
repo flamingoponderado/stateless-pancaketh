@@ -16,7 +16,8 @@
 //     word followed by the ziskemu -i file, which is [8B LE len][blob][pad]);
 //   - installs the M-mode trap handler at 0x60000000 and points mtvec at it
 //     (services read_input t0=0xF2 and halt a7=93 — the guest's only 2 ecalls);
-//   - registers the zisk_accel crypto-CSR extension;
+//   - registers the zisk_accel crypto-CSR extension unless built with
+//     SPIKE_NO_ACCEL (for the software guest);
 //   - runs to HTIF exit, then writes SPIKE_OUTPUT_LEN bytes (default 256) from
 //     0xa0410000 to <output-file>.
 // A clean halt also emits `spike_run: halted cleanly steps=N` on stderr so
@@ -56,7 +57,9 @@
 #include <cstdlib>
 #include <cctype>
 
+#ifndef SPIKE_NO_ACCEL
 extern extension_t* make_zisk_accel_extension();
+#endif
 
 static const reg_t INPUT_ADDR    = 0x40000000ULL;
 static const reg_t OUTPUT_ADDR   = 0xa0410000ULL;
@@ -504,12 +507,14 @@ int main(int argc, char** argv) {
             log_path, false, nullptr, false, nullptr, std::nullopt);
   if (log_path) sim.configure_log(false, true);
   processor_t* p = sim.get_core(0);
+#ifndef SPIKE_NO_ACCEL
   // register_extension() (called post-construction) does NOT invoke get_csrs(),
   // and the proc's init-time get_csrs sweep already ran, so add the accelerator
   // CSRs to the csrmap explicitly.
   extension_t* ext = make_zisk_accel_extension();
   p->register_extension(ext);
   for (auto& c : ext->get_csrs(*p)) p->get_state()->add_csr(c->address, c);
+#endif
 
   // trap handler + mtvec; zero the halt flag
   wr(&sim, HANDLER_ADDR, handler_bin, handler_bin_len);

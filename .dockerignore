@@ -5,13 +5,17 @@
 guest/build/
 work/
 
-# Submodules not needed for the ziskemu EEST image: flapjack is fetched by
-# lake itself, and riscv-isa-sim/cakeml are only needed for Spike/cake, not
-# ziskemu. evm-asm/ IS needed (its scripts/), but its own heavy nested
-# content is excluded below.
+# Spike and the EEST fixture converter are built from their submodules.
+# Flapjack is fetched by Lake; CakeML is not needed in the image.
 cakeml/
 flapjack/
-riscv-isa-sim/
+riscv-isa-sim/build/
+tools/spike/spike_run
+tools/spike/libziskaccel.so
+tools/spike/handler.o
+tools/spike/handler.elf
+tools/spike/handler.bin
+tools/spike/handler_bin.h
 evm-asm/.lake/
 evm-asm/gen-out/
 evm-asm/execution-specs/

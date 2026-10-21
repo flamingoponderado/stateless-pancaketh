@@ -55,12 +55,28 @@ else
         -I"$SPIKE_BUILD" -I.)
 fi
 CXX_STD="-std=c++2a -O2 -Wall -Wno-unused-parameter"
+SPIKE_ACCEL="${SPIKE_ACCEL:-1}"
+if [[ "$SPIKE_ACCEL" != 0 && "$SPIKE_ACCEL" != 1 ]]; then
+  echo "SPIKE_ACCEL must be 0 or 1" >&2
+  exit 1
+fi
+ACCEL_SOURCES=()
+ACCEL_FLAGS=()
+ACCEL_LIBS=()
+if [[ "$SPIKE_ACCEL" == 1 ]]; then
+  ACCEL_SOURCES=(zisk_accel.cc)
+  ACCEL_LIBS=(-lcrypto)
+else
+  ACCEL_FLAGS=(-DSPIKE_NO_ACCEL)
+fi
 
 if [[ "$OS_NAME" == "Darwin" ]]; then
   # Preserve the original macOS build commands.
-  g++ $CXX_STD -fPIC -shared -undefined dynamic_lookup "${INCS[@]}" \
-    zisk_accel.cc -o libziskaccel.so
-  echo "built $(pwd)/libziskaccel.so"
+  if [[ "$SPIKE_ACCEL" == 1 ]]; then
+    g++ $CXX_STD -fPIC -shared -undefined dynamic_lookup "${INCS[@]}" \
+      zisk_accel.cc -o libziskaccel.so
+    echo "built $(pwd)/libziskaccel.so"
+  fi
 
   "$AS" -march=rv64ima_zicsr -o handler.o handler.s
   "$LD" -Ttext=0x60000000 -nostdlib -o handler.elf handler.o
@@ -68,8 +84,8 @@ if [[ "$OS_NAME" == "Darwin" ]]; then
   xxd -i handler.bin > handler_bin.h
   echo "generated handler_bin.h ($(wc -c < handler.bin | tr -d ' ') bytes)"
 
-  g++ $CXX_STD "${INCS[@]}" \
-    spike_run.cc zisk_accel.cc \
+  g++ $CXX_STD "${INCS[@]}" "${ACCEL_FLAGS[@]}" \
+    spike_run.cc "${ACCEL_SOURCES[@]}" \
     "$SPIKE_BUILD"/libriscv.a "$SPIKE_BUILD"/libdisasm.a \
     "$SPIKE_BUILD"/libsoftfloat.a "$SPIKE_BUILD"/libfesvr.a "$SPIKE_BUILD"/libfdt.a \
     -L/opt/homebrew/lib -lpthread -lboost_regex \
@@ -77,9 +93,11 @@ if [[ "$OS_NAME" == "Darwin" ]]; then
   echo "built $(pwd)/spike_run"
 else
   # 1) accelerator extension as a loadable .so (for stock spike)
-  g++ $CXX_STD -fPIC -shared "${INCS[@]}" \
-    zisk_accel.cc -lcrypto -o libziskaccel.so
-  echo "built $(pwd)/libziskaccel.so"
+  if [[ "$SPIKE_ACCEL" == 1 ]]; then
+    g++ $CXX_STD -fPIC -shared "${INCS[@]}" \
+      zisk_accel.cc -lcrypto -o libziskaccel.so
+    echo "built $(pwd)/libziskaccel.so"
+  fi
 
   # 2) trap handler -> raw binary -> C header
   "$AS" -march=rv64ima_zicsr -o handler.o handler.s
@@ -89,11 +107,11 @@ else
   echo "generated handler_bin.h ($(wc -c < handler.bin | tr -d ' ') bytes)"
 
   # 3) custom driver executable (links spike static libs)
-  g++ $CXX_STD "${INCS[@]}" \
-    spike_run.cc zisk_accel.cc \
+  g++ $CXX_STD "${INCS[@]}" "${ACCEL_FLAGS[@]}" \
+    spike_run.cc "${ACCEL_SOURCES[@]}" \
     "$SPIKE_BUILD"/libriscv.a "$SPIKE_BUILD"/libdisasm.a \
     "$SPIKE_BUILD"/libsoftfloat.a "$SPIKE_BUILD"/libfesvr.a "$SPIKE_BUILD"/libfdt.a \
-    -lpthread -lcrypto \
+    -lpthread "${ACCEL_LIBS[@]}" \
     -o spike_run
   echo "built $(pwd)/spike_run"
 fi
