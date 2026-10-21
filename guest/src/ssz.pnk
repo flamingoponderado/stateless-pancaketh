@@ -438,6 +438,84 @@ fun 1 ssz_fail(1 code) {
   return 0;
 }
 
+/* Read a byte from the host input without copying the blob.  Host reads are
+   word-sized, so align the address before selecting the byte.  Callers prove
+   the requested bytes lie in the declared input length. */
+fun 1 host_input_byte(1 i) {
+  var w = 0;
+  !ldw w, INPUT_DATA_ADDR + (i & (0 - 8));
+  return (w >>> ((i & 7) * 8)) & 255;
+}
+
+fun 1 host_input_le32(1 i) {
+  var b0 = host_input_byte(i);
+  var b1 = host_input_byte(i + 1);
+  var b2 = host_input_byte(i + 2);
+  var b3 = host_input_byte(i + 3);
+  return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+
+/* Reject malformed fixed SSZ headers before input_blob copies the full input.
+   Check in decoder order and use the same SszErr codes.  Each nested header is
+   read only after its enclosing offsets and fixed length have been checked. */
+fun 1 precheck_host_ssz_header() {
+  var len = 0;
+  !ldw len, INPUT_LEN_ADDR;
+  if len >+ MAX_INPUT_LEN {
+    return 0;                 /* input_blob retains its length trap */
+  }
+  if len <+ 2 {
+    ssz_fail(1);
+  }
+  var schema = host_input_byte(0);
+  var version = host_input_byte(1);
+  if (schema != 21) || (version != 1) {
+    ssz_fail(2);
+  }
+  var body_len = len - 2;
+  if body_len <+ SI_FIXED {
+    ssz_fail(80);
+  }
+  var o_npr = host_input_le32(2);
+  var o_wit = host_input_le32(6);
+  st ssz_offs, o_npr;
+  st ssz_offs + 8, o_wit;
+  ssz_check_offsets(ssz_offs, 2, SI_FIXED, body_len);
+  var nlen = o_wit - o_npr;
+  if nlen <+ NPR_FIXED {
+    ssz_fail(81);
+  }
+  var np = 2 + o_npr;
+  var o_pl = host_input_le32(np);
+  var o_vh = host_input_le32(np + 4);
+  var o_rq = host_input_le32(np + 40);
+  st ssz_offs, o_pl;
+  st ssz_offs + 8, o_vh;
+  st ssz_offs + 16, o_rq;
+  ssz_check_offsets(ssz_offs, 3, NPR_FIXED, nlen);
+  var payload_len = o_vh - o_pl;
+  if payload_len <+ PL_FIXED {
+    ssz_fail(50);
+  }
+  var payload = np + o_pl;
+  var o_extra = host_input_le32(payload + PLO_EXTRA_OFF);
+  var o_txs = host_input_le32(payload + PLO_TXS_OFF);
+  var o_wd = host_input_le32(payload + PLO_WD_OFF);
+  var o_bal = host_input_le32(payload + PLO_BAL_OFF);
+  st ssz_offs, o_extra;
+  st ssz_offs + 8, o_txs;
+  st ssz_offs + 16, o_wd;
+  st ssz_offs + 24, o_bal;
+  ssz_check_offsets(ssz_offs, 4, PL_FIXED, payload_len);
+  return 0;
+}
+
+fun 1 decode_host_input() {
+  precheck_host_ssz_header();
+  var {1,1} inp = input_blob();
+  return decode_stateless_input(inp.0, inp.1);
+}
+
 /* Container offset checks (deserializeAux .container): every variable
    offset in [fixed, len], nondecreasing, first == fixed. offs is a word
    array of the n variable-field offsets in field order. */

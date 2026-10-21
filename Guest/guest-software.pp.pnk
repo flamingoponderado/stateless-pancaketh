@@ -3671,6 +3671,74 @@ fun 1 ssz_fail(1 code) {
   throw SszErr code;
   return 0;
 }
+fun 1 host_input_byte(1 i) {
+  var w = 0;
+  !ldw w, 1073741840 + (i & (0 - 8));
+  return (w >>> ((i & 7) * 8)) & 255;
+}
+fun 1 host_input_le32(1 i) {
+  var b0 = host_input_byte(i);
+  var b1 = host_input_byte(i + 1);
+  var b2 = host_input_byte(i + 2);
+  var b3 = host_input_byte(i + 3);
+  return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+fun 1 precheck_host_ssz_header() {
+  var len = 0;
+  !ldw len, 1073741832;
+  if len >+ 1073741808 {
+    return 0;
+  }
+  if len <+ 2 {
+    ssz_fail(1);
+  }
+  var schema = host_input_byte(0);
+  var version = host_input_byte(1);
+  if (schema != 21) || (version != 1) {
+    ssz_fail(2);
+  }
+  var body_len = len - 2;
+  if body_len <+ 16 {
+    ssz_fail(80);
+  }
+  var o_npr = host_input_le32(2);
+  var o_wit = host_input_le32(6);
+  st ssz_offs, o_npr;
+  st ssz_offs + 8, o_wit;
+  ssz_check_offsets(ssz_offs, 2, 16, body_len);
+  var nlen = o_wit - o_npr;
+  if nlen <+ 44 {
+    ssz_fail(81);
+  }
+  var np = 2 + o_npr;
+  var o_pl = host_input_le32(np);
+  var o_vh = host_input_le32(np + 4);
+  var o_rq = host_input_le32(np + 40);
+  st ssz_offs, o_pl;
+  st ssz_offs + 8, o_vh;
+  st ssz_offs + 16, o_rq;
+  ssz_check_offsets(ssz_offs, 3, 44, nlen);
+  var payload_len = o_vh - o_pl;
+  if payload_len <+ 540 {
+    ssz_fail(50);
+  }
+  var payload = np + o_pl;
+  var o_extra = host_input_le32(payload + 436);
+  var o_txs = host_input_le32(payload + 504);
+  var o_wd = host_input_le32(payload + 508);
+  var o_bal = host_input_le32(payload + 528);
+  st ssz_offs, o_extra;
+  st ssz_offs + 8, o_txs;
+  st ssz_offs + 16, o_wd;
+  st ssz_offs + 24, o_bal;
+  ssz_check_offsets(ssz_offs, 4, 540, payload_len);
+  return 0;
+}
+fun 1 decode_host_input() {
+  precheck_host_ssz_header();
+  var {1,1} inp = input_blob();
+  return decode_stateless_input(inp.0, inp.1);
+}
 fun 1 ssz_check_offsets(1 offs, 1 n, 1 fixed, 1 len) {
   if n == 0 {
     return 0;
@@ -16350,13 +16418,12 @@ fun 1 main() {
   header_init();
   evm_init();
   fork_init();
-  var {1,1} inp = input_blob();
   var 1 out = alloc(256);
   var 1 z32 = alloc(32);
   memzero(z32, 32);
   var si = 0;
   var err_code = 0;
-  try si = decode_stateless_input(inp.0, inp.1)
+  try si = decode_host_input()
   catch SszErr => err_code {
     var 1 n = serialize_result(out, z32, 0, 0, 0);
     st8 out + n, err_code;
