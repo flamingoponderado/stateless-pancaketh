@@ -49,6 +49,21 @@ can run it, as an alternative to evm-asm's hand-written/codegen RV64 guest.
   see [docs/ZISK-PROVE-BLOCK-FLAPJACK.md](docs/ZISK-PROVE-BLOCK-FLAPJACK.md)
   and [issue #54](https://github.com/pirapira/stateless-pancaketh/issues/54).
 
+## Known deviations from execution-specs
+
+### Witness-header integer width
+
+The Pancake guest decodes RLP witness-header `number`, `gas_limit`, and
+`gas_used` into 64-bit words. It rejects a canonical integer wider than eight
+bytes (at least 2^64) during header decoding. The pinned Python
+execution-specs instead declares these fields as arbitrary-precision `Uint`
+and can decode such an integer. This is a guest input envelope, **not** an RLP
+validity rule: the guest can reject an input that the Python reference accepts,
+particularly when the wide value is in an earlier witness ancestor whose gas
+rules are not revalidated. The current payload's block gas limit is a separate
+SSZ `uint64` field. See [docs/ENVELOPE.md](docs/ENVELOPE.md) for the other
+representation bounds.
+
 ## Docker
 
 To build this branch's software guest image, initialize the Spike and fixture

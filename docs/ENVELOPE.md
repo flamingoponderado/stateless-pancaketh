@@ -50,9 +50,10 @@ this helper.
 
 ### Word-sized header scalars
 
-*Reference:* the header RLP path can parse number, gas values, timestamp,
-blob-gas counters, and slot as arbitrary-width integers before later
-validation.
+*Reference:* the header RLP path decodes number, gas limit, and gas used as
+arbitrary-precision `Uint`. Timestamp is `U256`; blob-gas counters and slot
+are `U64`. A canonical `Uint` wider than eight bytes is accepted at decode
+time.
 
 *Guest:* [hdr_word_field at guest/src/header.pnk:33](../guest/src/header.pnk#L33)
 calls the unbounded header byte parser and rejects a payload wider than eight
@@ -69,11 +70,12 @@ slot does so at
 The header record documents the complete set of word fields at
 [guest/src/types.h:116](../guest/src/types.h#L116).
 
-*Why this is harmless:* these are uint64-sized consensus quantities on the
-real chains supported by this guest. A wider RLP integer is outside that
-chain envelope and is rejected during header decoding, before it can be
-executed as a valid block. The limit prevents a malformed header from being
-folded into a different 64-bit value.
+*Consequence:* a wider `Uint` is outside the guest's 64-bit header envelope,
+so the guest can reject an input accepted by the Python reference. This is
+especially visible for an earlier witness ancestor: `validate_headers` checks
+hash linkage but does not revalidate that ancestor's gas rules. The width
+check prevents truncating the integer into a different 64-bit value; it does
+not mean the RLP encoding is malformed.
 
 ### Header values that are naturally U256
 
