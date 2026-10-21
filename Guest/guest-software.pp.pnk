@@ -16300,6 +16300,13 @@ fun 1 run_attempt(1 si) {
   block_hashes = vh.1;
   block_hashes_n = nh;
   skip;
+  if (lds 1 (pl + 96)) >+ (lds 1 (pl + 88)) {
+    throw BlockErr 22;
+  }
+  var 1 gas_ok = check_gas_limit(lds 1 (pl + 88), lds 1 (parent + 104));
+  if gas_ok == 0 {
+    throw BlockErr 10;
+  }
   var 1 nodedb = nodedb_build(lds 1 (si + 40), lds 1 (si + 48));
   var 1 codedb = nodedb_build(lds 1 (si + 56), lds 1 (si + 64));
   state_init(nodedb, lds 1 (parent + 32), codedb);

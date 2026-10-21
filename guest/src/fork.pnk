@@ -934,6 +934,16 @@ fun 1 run_attempt(1 si) {
   block_hashes = vh.1;
   block_hashes_n = nh;
   DBG(11);
+  /* Reject invalid payload gas limits before building witness databases and
+     payload tries.  validate_header checks these again after constructing the
+     header, preserving its standalone validation behavior. */
+  if (lds 1 (pl + PL_GAS_USED)) >+ (lds 1 (pl + PL_GAS_LIMIT)) {
+    throw BlockErr 22;
+  }
+  var 1 gas_ok = check_gas_limit(lds 1 (pl + PL_GAS_LIMIT), lds 1 (parent + HDR_GAS_LIMIT));
+  if gas_ok == 0 {
+    throw BlockErr 10;
+  }
   /* pre-state */
   var 1 nodedb = nodedb_build(lds 1 (si + SI_STATE), lds 1 (si + SI_STATE_N));
   var 1 codedb = nodedb_build(lds 1 (si + SI_CODES), lds 1 (si + SI_CODES_N));
