@@ -1055,11 +1055,37 @@ fun 1 sha256_pair(1 input_a, 1 input_b, 1 out) {
   sha256_finish(sha_st, out);
   return 0;
 }
+var 1 keccak_rc = 0;
 var 1 keccak_st = 0;
 var 1 keccak_pad = 0;
 fun 1 keccak_init() {
+  keccak_rc = alloc(192);
   keccak_st = alloc(200);
   keccak_pad = alloc(136);
+  st keccak_rc + 0, 1;
+  st keccak_rc + 8, 32898;
+  st keccak_rc + 16, -9223372036854742902;
+  st keccak_rc + 24, -9223372034707259392;
+  st keccak_rc + 32, 32907;
+  st keccak_rc + 40, 2147483649;
+  st keccak_rc + 48, -9223372034707259263;
+  st keccak_rc + 56, -9223372036854743031;
+  st keccak_rc + 64, 138;
+  st keccak_rc + 72, 136;
+  st keccak_rc + 80, 2147516425;
+  st keccak_rc + 88, 2147483658;
+  st keccak_rc + 96, 2147516555;
+  st keccak_rc + 104, -9223372036854775669;
+  st keccak_rc + 112, -9223372036854742903;
+  st keccak_rc + 120, -9223372036854743037;
+  st keccak_rc + 128, -9223372036854743038;
+  st keccak_rc + 136, -9223372036854775680;
+  st keccak_rc + 144, 32778;
+  st keccak_rc + 152, -9223372034707292150;
+  st keccak_rc + 160, -9223372034707259263;
+  st keccak_rc + 168, -9223372036854742912;
+  st keccak_rc + 176, 2147483649;
+  st keccak_rc + 184, -9223372034707259384;
   return 0;
 }
 fun 1 keccak_f1600(1 stp) {

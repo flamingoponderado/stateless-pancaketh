@@ -69,6 +69,7 @@ run_check "build software and accelerated guests" "$ROOT/tools/build_both.sh"
 # specifications must agree with reference values.
 run_check "lean: lake build Guest" lake build Guest
 run_check "lean: accel-ffi-check" lake exe accel-ffi-check
+run_check "lean: input-arena-check" lake exe input-arena-check
 run_check "accelerator foreign-call smoke (ziskemu)" python3 "$ROOT/tools/accel-ffi-smoke.py"
 
 run_unit_variant() {
@@ -78,6 +79,12 @@ run_unit_variant() {
       env ACCEL=1 SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
       "$ROOT/guest/test/t_globals.pnk" "$UNIT_INPUT" \
       "struct.pack('<QQQQQQQQ', 0xa1000000, 0xa1000000, 0xa1000040, 1234, 5678, 0xa1000040, 0xa10f4280, 1234)"
+    run_check "$variant unit t_htab" \
+      env ACCEL=1 SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
+      "$ROOT/guest/test/t_htab.pnk" "$UNIT_INPUT" @guest/test/exp_htab.py
+    run_check "$variant unit t_htab_ops" \
+      env ACCEL=1 SPIKE_OUTPUT_LEN=131072 "$ROOT/tools/unit.py" \
+      "$ROOT/guest/test/t_htab_ops.pnk" "$UNIT_INPUT" @guest/test/exp_htab_ops.py
     run_check "$variant unit t_keccak" \
       env ACCEL=1 SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
       "$ROOT/guest/test/t_keccak.pnk" "$UNIT_INPUT" \
@@ -117,6 +124,12 @@ run_unit_variant() {
       env -u ACCEL SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
       "$ROOT/guest/test/t_globals.pnk" "$UNIT_INPUT" \
       "struct.pack('<QQQQQQQQ', 0xa1000000, 0xa1000000, 0xa1000040, 1234, 5678, 0xa1000040, 0xa10f4280, 1234)"
+    run_check "$variant unit t_htab" \
+      env -u ACCEL SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
+      "$ROOT/guest/test/t_htab.pnk" "$UNIT_INPUT" @guest/test/exp_htab.py
+    run_check "$variant unit t_htab_ops" \
+      env -u ACCEL SPIKE_OUTPUT_LEN=131072 "$ROOT/tools/unit.py" \
+      "$ROOT/guest/test/t_htab_ops.pnk" "$UNIT_INPUT" @guest/test/exp_htab_ops.py
     run_check "$variant unit t_keccak" \
       env -u ACCEL SPIKE_OUTPUT_LEN=65536 "$ROOT/tools/unit.py" \
       "$ROOT/guest/test/t_keccak.pnk" "$UNIT_INPUT" \

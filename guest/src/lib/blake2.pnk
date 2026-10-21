@@ -52,6 +52,33 @@ fun 1 blake2_init() {
   return 0;
 }
 
+#ifndef ZISK_ACCEL
+/* G(v, a, b, c, d, x, y) on the working vector b2_v (indices in words). */
+fun 1 blake2_g(1 a, 1 b, 1 c, 1 d, 1 x, 1 y) {
+  var pa = b2_v + a * 8;
+  var pb = b2_v + b * 8;
+  var pc = b2_v + c * 8;
+  var pd = b2_v + d * 8;
+  var va = lds 1 pa;
+  var vb = lds 1 pb;
+  var vc = lds 1 pc;
+  var vd = lds 1 pd;
+  va = va + vb + x;
+  vd = (vd ^ va) #>> 32;
+  vc = vc + vd;
+  vb = (vb ^ vc) #>> 24;
+  va = va + vb + y;
+  vd = (vd ^ va) #>> 16;
+  vc = vc + vd;
+  vb = (vb ^ vc) #>> 63;
+  st pa, va;
+  st pb, vb;
+  st pc, vc;
+  st pd, vd;
+  return 0;
+}
+#endif
+
 /* compress(rounds, h, m, t0, t1, f): h = 8 lanes (updated in place to the
    output state h[i] ^ v[i] ^ v[i+8]), m = 16 message lanes, f = 0 or 1. */
 fun 1 blake2b_f(1 rounds, 1 h, 1 m, 1 t0, 1 t1, 1 f) {

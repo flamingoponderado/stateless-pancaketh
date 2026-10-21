@@ -51,19 +51,18 @@ can run it, as an alternative to evm-asm's hand-written/codegen RV64 guest.
 
 ## Docker
 
-A pre-built image bakes in `ziskemu`, the flapjack-compiled guest ELFs
-(software and ZisK-accelerated), and the full `tests-zkevm` EEST fixture
+A pre-built image bakes in `ziskemu`, the flapjack-compiled accelerated guest,
+and the full `tests-zkevm` EEST fixture
 corpus, so you can reproduce a conformance run with one `docker run` — no
 Lean, Rust, or RISC-V toolchain needed locally:
 
 ```bash
-docker run --rm ghcr.io/pirapira/stateless-pancaketh:v0.1.3
+docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4
 ```
 
-`v0.1.3` is built from `main` at `19bcd58` (tag `r20261001-02`) with the
-`tests-zkevm@v21.0.1` fixtures, and passes the full corpus. It runs on any
-x86-64 CPU with AVX2, BMI2 and ADX (no AVX-512 needed; `v0.1.2` and the
-`r20261001-01` build predate that fix).
+`v0.1.4` was built from `main` at `414e6c6` (tag `r20261003-02`) with the
+`tests-zkevm@v21.0.1` fixtures. It predates restoration of the software guest;
+build this branch locally to use the software ELF.
 
 This defaults to the accelerated guest against the full fixture corpus under
 `ziskemu`. Override the entrypoint's arguments to run something narrower:
@@ -71,16 +70,12 @@ This defaults to the accelerated guest against the full fixture corpus under
 ```bash
 # Fewer parallel ziskemu jobs (each uses ~6.5-6.7 GB RSS; the entrypoint
 # auto-caps --jobs to available memory already, but you can go lower)
-docker run --rm ghcr.io/pirapira/stateless-pancaketh:v0.1.3 \
-  guest/build/guest-accel.elf work/inputs/manifest.tsv --ziskemu --quiet-passes --jobs 2
-
-# Unaccelerated software guest instead of the ZisK-accelerated one
-docker run --rm ghcr.io/pirapira/stateless-pancaketh:v0.1.3 \
-  guest/build/guest.elf work/inputs/manifest.tsv --ziskemu --quiet-passes
+docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4 \
+  guest/build/guest.elf work/inputs/manifest.tsv --ziskemu --quiet-passes --jobs 2
 
 # Narrow subset for a quick smoke check
-docker run --rm ghcr.io/pirapira/stateless-pancaketh:v0.1.3 \
-  guest/build/guest-accel.elf work/inputs/manifest.tsv --ziskemu --quiet-passes \
+docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4 \
+  guest/build/guest.elf work/inputs/manifest.tsv --ziskemu --quiet-passes \
   --filter random_statetest --limit 50
 ```
 

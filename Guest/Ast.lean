@@ -2483,6 +2483,9 @@ def guestFn_sha256_pair : Decl (BitVec 64) :=
           (Prog.return (Exp.const (BitVec.ofNat 64 0))))))))))))
       returnShape := Shape.one }
 
+def guestGlobal_keccak_rc : Decl (BitVec 64) :=
+  Decl.decl Shape.one "keccak_rc" (Exp.const (BitVec.ofNat 64 0))
+
 def guestGlobal_keccak_st : Decl (BitVec 64) :=
   Decl.decl Shape.one "keccak_st" (Exp.const (BitVec.ofNat 64 0))
 
@@ -2497,10 +2500,60 @@ def guestFn_keccak_init : Decl (BitVec 64) :=
       params := []
       body :=
         (Prog.seq
+          (Prog.call (some ((some (VarKind.global, "keccak_rc")), none)) "alloc" [(Exp.const (BitVec.ofNat 64 192))])
+          (Prog.seq
           (Prog.call (some ((some (VarKind.global, "keccak_st")), none)) "alloc" [(Exp.const (BitVec.ofNat 64 200))])
           (Prog.seq
           (Prog.call (some ((some (VarKind.global, "keccak_pad")), none)) "alloc" [(Exp.const (BitVec.ofNat 64 136))])
-          (Prog.return (Exp.const (BitVec.ofNat 64 0)))))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 0))]) (Exp.const (BitVec.ofNat 64 1)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 8))]) (Exp.const (BitVec.ofNat 64 32898)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 16))]) (Exp.const (BitVec.ofNat 64 9223372036854808714)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 24))]) (Exp.const (BitVec.ofNat 64 9223372039002292224)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 32))]) (Exp.const (BitVec.ofNat 64 32907)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 40))]) (Exp.const (BitVec.ofNat 64 2147483649)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 48))]) (Exp.const (BitVec.ofNat 64 9223372039002292353)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 56))]) (Exp.const (BitVec.ofNat 64 9223372036854808585)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 64))]) (Exp.const (BitVec.ofNat 64 138)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 72))]) (Exp.const (BitVec.ofNat 64 136)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 80))]) (Exp.const (BitVec.ofNat 64 2147516425)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 88))]) (Exp.const (BitVec.ofNat 64 2147483658)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 96))]) (Exp.const (BitVec.ofNat 64 2147516555)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 104))]) (Exp.const (BitVec.ofNat 64 9223372036854775947)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 112))]) (Exp.const (BitVec.ofNat 64 9223372036854808713)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 120))]) (Exp.const (BitVec.ofNat 64 9223372036854808579)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 128))]) (Exp.const (BitVec.ofNat 64 9223372036854808578)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 136))]) (Exp.const (BitVec.ofNat 64 9223372036854775936)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 144))]) (Exp.const (BitVec.ofNat 64 32778)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 152))]) (Exp.const (BitVec.ofNat 64 9223372039002259466)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 160))]) (Exp.const (BitVec.ofNat 64 9223372039002292353)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 168))]) (Exp.const (BitVec.ofNat 64 9223372036854808704)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 176))]) (Exp.const (BitVec.ofNat 64 2147483649)))
+          (Prog.seq
+          (Prog.store (Exp.op BinOp.add [(Exp.var VarKind.global "keccak_rc"), (Exp.const (BitVec.ofNat 64 184))]) (Exp.const (BitVec.ofNat 64 9223372039002292232)))
+          (Prog.return (Exp.const (BitVec.ofNat 64 0))))))))))))))))))))))))))))))
       returnShape := Shape.one }
 
 def guestFn_keccak_f1600 : Decl (BitVec 64) :=
@@ -30099,6 +30152,7 @@ def guestAst : List (Decl (BitVec 64)) :=
     guestFn_sha256_finish,
     guestFn_sha256,
     guestFn_sha256_pair,
+    guestGlobal_keccak_rc,
     guestGlobal_keccak_st,
     guestGlobal_keccak_pad,
     guestFn_keccak_init,

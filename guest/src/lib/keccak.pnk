@@ -48,7 +48,7 @@ fun 1 keccak_f1600(1 stp) {
      array, so the accelerator reads and writes exactly the array. */
   @keccakf(stp, 0, stp, 200);
   return 0;
-#endif
+#else
   var a00 = lds 1 (stp + 0);
   var a10 = lds 1 (stp + 8);
   var a20 = lds 1 (stp + 16);
@@ -190,6 +190,7 @@ fun 1 keccak_f1600(1 stp) {
   st stp + 184, a34;
   st stp + 192, a44;
   return 0;
+#endif
 }
 
 /* XOR the 136-byte block at blk into the state, then permute. */
