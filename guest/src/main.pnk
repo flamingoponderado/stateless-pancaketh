@@ -36,13 +36,12 @@ fun 1 main() {
   header_init();
   evm_init();
   fork_init();
-  var {1,1} inp = input_blob();
   var 1 out = alloc(256);
   var 1 z32 = alloc(32);
   memzero(z32, 32);
   var si = 0;
   var err_code = 0;
-  try si = decode_stateless_input(inp.0, inp.1)
+  try si = decode_host_input()
   catch SszErr => err_code {
     var 1 n = serialize_result(out, z32, 0, 0, 0);
     st8 out + n, err_code;
