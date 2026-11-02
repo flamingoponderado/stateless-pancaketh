@@ -57,6 +57,7 @@ exception MptErr : 1;
 #define MPT_E_SPLIT_COLLISION 11  /* Unexpected collision during split */
 #define MPT_E_EMPTY_BRANCH   12   /* _collapse_branch: empty branch */
 #define MPT_E_UNCACHED       13   /* internal: child RLP not cached before its parent (cannot happen) */
+#define MPT_E_SECURED_PATH   14   /* _validate_secured_trie_paths: path length != 64-nibble key */
 #define MPT_E_ACCT_MALFORMED 20   /* account leaf is not a 4-item list of bytes */
 #define MPT_E_ACCT_NONCE     21   /* nonce wider than 8 bytes (guest envelope) */
 #define MPT_E_ACCT_BALANCE   22   /* balance wider than 32 bytes */
@@ -91,6 +92,10 @@ exception MptErr : 1;
 #define MPT_SECURED  8
 #define MPT_SIZE     16
 
+/* _validate_secured_trie_paths: key length and explicit-stack capacity. */
+#define SECURED_TRIE_KEY_NIBBLES 64
+#define VP_STACK_SLOTS 1024
+
 /* Account record written by decode_account_from_leaf. */
 #define ACCT_NONCE         0
 #define ACCT_BALANCE       8    /* U256, 4 LE limbs */
@@ -103,6 +108,7 @@ var 1 empty_code_hash = 0;   /* keccak256("") */
 var 1 mpt_nib_scratch = 0;   /* 64 nibbles for trie_lookup */
 var 1 mpt_hash_scratch = 0;  /* 40 bytes: keccak / balance scratch */
 var 1 mpt_key_scratch = 0;   /* 16 bytes: rlp(index) keys */
+var 1 mpt_vp_stack = 0;      /* VP_STACK_SLOTS <node, remaining> pairs */
 
 fun 1 mpt_fail(1 code) {
   throw MptErr code;
@@ -115,6 +121,7 @@ fun 1 mpt_init() {
   mpt_nib_scratch = alloc(64);
   mpt_hash_scratch = alloc(40);
   mpt_key_scratch = alloc(16);
+  mpt_vp_stack = alloc(VP_STACK_SLOTS * 16);
   st8 mpt_hash_scratch, 128;
   keccak256(mpt_hash_scratch, 1, empty_trie_root);
   keccak256(mpt_hash_scratch, 0, empty_code_hash);
@@ -524,7 +531,63 @@ fun 1 _decode_witness_node(1 db, 1 p, 1 n) {
 }
 
 
-/* decode_witness_to_mpt: root node ptr, 0 for EMPTY_TRIE_ROOT. */
+/* _validate_secured_trie_paths(node, SECURED_TRIE_KEY_NIBBLES): every decoded
+   leaf ends exactly at the 64-nibble secured key, every extension segment is
+   shorter than the key nibbles remaining below it, and no branch sits at the
+   key's end. HashedNode / empty children are not checked. The recursion runs
+   as a depth-first loop over an explicit stack of <node, remaining> pairs.
+   Bound: a branch is expanded only while remaining > 0 and each one consumes
+   a nibble, so at most 64 branches lie on any root path, each leaving at most
+   15 pending siblings on the stack: 1 + 15 * 64 = 961 <= VP_STACK_SLOTS. */
+fun 1 _validate_secured_trie_paths(1 root) {
+  var 1 stk = mpt_vp_stack;
+  st stk, root;
+  st stk + 8, SECURED_TRIE_KEY_NIBBLES;
+  var sp = 1;
+  while sp != 0 {
+    sp = sp - 1;
+    var node = lds 1 (stk + sp * 16);
+    var rem = lds 1 (stk + sp * 16 + 8);
+    if node != 0 {
+      var k = lds 1 (node + NODE_KIND);
+      if k == NODE_LEAF {
+        if (lds 1 (node + NODE_NIB_LEN)) != rem {
+          mpt_fail(MPT_E_SECURED_PATH);
+        }
+      }
+      if k == NODE_EXT {
+        var sl = lds 1 (node + NODE_NIB_LEN);
+        if sl >=+ rem {
+          mpt_fail(MPT_E_SECURED_PATH);
+        }
+        st stk + sp * 16, lds 1 (node + NODE_CHILD);
+        st stk + sp * 16 + 8, rem - sl;
+        sp = sp + 1;
+      }
+      if k == NODE_BRANCH {
+        if rem == 0 {
+          mpt_fail(MPT_E_SECURED_PATH);
+        }
+        var i = 0;
+        while i < 16 {
+          var c = NODE_CHILD_AT(node, i);
+          if c != 0 {
+            st stk + sp * 16, c;
+            st stk + sp * 16 + 8, rem - 1;
+            sp = sp + 1;
+          }
+          i = i + 1;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+/* decode_witness_to_mpt: root node ptr, 0 for EMPTY_TRIE_ROOT. Every caller
+   decodes a secured trie (the state trie or a storage trie), as every
+   witness_state.py call passes secured=True, so the secured path-length check
+   always runs. */
 fun 1 decode_witness_to_mpt(1 db, 1 root_hash) {
   var 1 is_empty = memeq(root_hash, empty_trie_root, 32);
   if is_empty != 0 {
@@ -539,6 +602,7 @@ fun 1 decode_witness_to_mpt(1 db, 1 root_hash) {
     var 1 h = alloc(32);
     memcpy(h, root_hash, 32);
     st nd + NODE_HASH, h;
+    _validate_secured_trie_paths(nd);
   }
   return nd;
 }

@@ -3650,6 +3650,7 @@ var 1 empty_code_hash = 0;
 var 1 mpt_nib_scratch = 0;
 var 1 mpt_hash_scratch = 0;
 var 1 mpt_key_scratch = 0;
+var 1 mpt_vp_stack = 0;
 fun 1 mpt_fail(1 code) {
   throw MptErr code;
   return 0;
@@ -3660,6 +3661,7 @@ fun 1 mpt_init() {
   mpt_nib_scratch = alloc(64);
   mpt_hash_scratch = alloc(40);
   mpt_key_scratch = alloc(16);
+  mpt_vp_stack = alloc(1024 * 16);
   st8 mpt_hash_scratch, 128;
   keccak256(mpt_hash_scratch, 1, empty_trie_root);
   keccak256(mpt_hash_scratch, 0, empty_code_hash);
@@ -4004,6 +4006,50 @@ fun 1 _decode_witness_node(1 db, 1 p, 1 n) {
   scratch_release(mark);
   return nd;
 }
+fun 1 _validate_secured_trie_paths(1 root) {
+  var 1 stk = mpt_vp_stack;
+  st stk, root;
+  st stk + 8, 64;
+  var sp = 1;
+  while sp != 0 {
+    sp = sp - 1;
+    var node = lds 1 (stk + sp * 16);
+    var rem = lds 1 (stk + sp * 16 + 8);
+    if node != 0 {
+      var k = lds 1 (node + 0);
+      if k == 1 {
+        if (lds 1 (node + 40)) != rem {
+          mpt_fail(14);
+        }
+      }
+      if k == 2 {
+        var sl = lds 1 (node + 40);
+        if sl >=+ rem {
+          mpt_fail(14);
+        }
+        st stk + sp * 16, lds 1 (node + 48);
+        st stk + sp * 16 + 8, rem - sl;
+        sp = sp + 1;
+      }
+      if k == 3 {
+        if rem == 0 {
+          mpt_fail(14);
+        }
+        var i = 0;
+        while i < 16 {
+          var c = (lds 1 ((node) + 32 + (i) * 8));
+          if c != 0 {
+            st stk + sp * 16, c;
+            st stk + sp * 16 + 8, rem - 1;
+            sp = sp + 1;
+          }
+          i = i + 1;
+        }
+      }
+    }
+  }
+  return 0;
+}
 fun 1 decode_witness_to_mpt(1 db, 1 root_hash) {
   var 1 is_empty = memeq(root_hash, empty_trie_root, 32);
   if is_empty != 0 {
@@ -4018,6 +4064,7 @@ fun 1 decode_witness_to_mpt(1 db, 1 root_hash) {
     var 1 h = alloc(32);
     memcpy(h, root_hash, 32);
     st nd + 24, h;
+    _validate_secured_trie_paths(nd);
   }
   return nd;
 }
