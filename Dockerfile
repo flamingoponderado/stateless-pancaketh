@@ -6,7 +6,7 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG EEST_TAG=tests-zkevm@v21.0.1
+ARG EEST_TAG=tests-zkevm@v21.0.6
 ARG GIT_COMMIT=unknown
 ARG GIT_REF=unknown
 ARG BUILD_DATE=unknown

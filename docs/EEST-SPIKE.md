@@ -17,7 +17,7 @@ Follow `README.md`'s "Quick start" section first: it covers cloning, the
 initializing the `evm-asm` and `riscv-isa-sim` submodules, and building
 `spike_run`. This document only adds the full-corpus-specific steps below,
 against the EEST fixture tag this repo currently pins
-(`eest-fixture-tag.txt` at the repository root; `tests-zkevm@v21.0.1` for the
+(`eest-fixture-tag.txt` at the repository root; `tests-zkevm@v21.0.6` for the
 recorded run below).
 
 ## Fetch, convert, build, and run all fixtures
@@ -41,6 +41,38 @@ JSON and per-fixture logs remain under the commit-named run directory for
 inspection and reruns with `--from-json` or `--labels`.
 
 ## Recorded result
+
+Run against `tests-zkevm@v21.0.6` (both the `blockchain_tests` and
+`blockchain_tests_engine` fixtures, 33,831 inputs), with 10 Spike workers and
+both guests built with `flapjack` from the tree that adds the secured-trie
+path-length check (`_validate_secured_trie_paths` in `guest/src/mpt.pnk`).
+The accelerated guest ran under a `spike_run` built with `SPIKE_ACCEL=1`, and
+the software guest (no `ACCEL`) under one built with `SPIKE_ACCEL=0`, which
+faults on any accelerator CSR access:
+
+```text
+accelerated:  total: 33831  PASS(full): 33821  PASS(malformed): 10   (7 min 30 s)
+              steps over passing cases: min=25383 max=12205029478
+software:     total: 33831  PASS(full): 33821  PASS(malformed): 10   (28 min 56 s)
+              steps over passing cases: min=47613 max=78766714575
+```
+
+All 33,831 outputs are byte-identical between the two guests. Without the
+path-length check, both cases of
+`eip8025_optional_proofs/test_witness_state_rejects_overlength_secured_trie_path`
+(new in v21.0.6) failed: the guest accepted a witness whose parent state trie
+holds a leaf whose path overruns the 64-nibble secured key. Every other record
+already passed.
+
+The run ELFs had sha256
+`486dfd265a04a60f1fc58f471c0b9c7a4c92c9583f36cb478d99d93fd996524e`
+(accelerated) and
+`59411a2066af7cd2a97608ca6e6f91cbdaf717c1b32a4db2d869c6d2385f4682`
+(software). The ELF file digest depends on the output path given to
+`guest/build.sh`. The loaded image (`objcopy -O binary`) does not, and
+reproduces across rebuilds.
+
+### Earlier result: `tests-zkevm@v21.0.1`
 
 Run on stateless-pancaketh commit
 `fb4553b7ac75caba73f01e7e0f29056fc12c8195`, with 32 Spike workers and the
