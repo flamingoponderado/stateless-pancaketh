@@ -37,8 +37,14 @@ ENV SPIKE_RUN=/stateless-pancaketh/tools/spike/spike_run
 # The default guest/build.sh variant implements precompiles in Pancake and
 # links a runtime without accelerator CSR stubs.
 RUN elan toolchain install "$(cat lean-toolchain)"
+# `Sail` (dhsorens/lean-sail, a transitive Lake dependency via riscv-zkvm)
+# carries no license, so its source is not redistributed: it is not needed
+# to build or run the guest, and it is removed in the same layer that fetched
+# it so that no image layer contains it.
 RUN mkdir -p guest/build \
-    && env -u ACCEL guest/build.sh guest/src/main.pnk guest/build/guest.elf
+    && env -u ACCEL guest/build.sh guest/src/main.pnk guest/build/guest.elf \
+    && rm -rf .lake/packages/Sail \
+    && test ! -e .lake/packages/Sail
 
 RUN mkdir -p /usr/local/share/licenses/lean-packages \
     && for pkg_dir in .lake/packages/*/; do \
@@ -61,11 +67,14 @@ RUN curl -sSf \
       -o /usr/local/share/licenses/elan-LICENSE.txt \
     || printf 'elan: Apache-2.0\nhttps://github.com/leanprover/elan/blob/master/LICENSE\n' \
       > /usr/local/share/licenses/elan-LICENSE.txt
+# The fixtures are the fixtures_zkevm.tar.gz release asset of
+# ethereum/execution-specs at EEST_TAG (evm-asm/scripts/eest-fetch-fixtures.sh),
+# so ship that repository's license at that tag (CC0-1.0).
 RUN curl -sSf \
-      https://raw.githubusercontent.com/ethereum/execution-spec-tests/main/LICENSE \
-      -o /usr/local/share/licenses/eest-LICENSE.txt \
-    || printf 'execution-spec-tests: MIT\nhttps://github.com/ethereum/execution-spec-tests/blob/main/LICENSE\n' \
-      > /usr/local/share/licenses/eest-LICENSE.txt
+      "https://raw.githubusercontent.com/ethereum/execution-specs/${EEST_TAG}/LICENSE.md" \
+      -o /usr/local/share/licenses/execution-specs-LICENSE.md \
+    || printf 'execution-specs (EEST fixtures %s): CC0-1.0\nhttps://github.com/ethereum/execution-specs/blob/%s/LICENSE.md\n' \
+      "${EEST_TAG}" "${EEST_TAG}" > /usr/local/share/licenses/execution-specs-LICENSE.md
 
 RUN canonical_tag="$(tr -d '[:space:]' < eest-fixture-tag.txt)" \
     && if [ "${EEST_TAG}" != "${canonical_tag}" ]; then \
