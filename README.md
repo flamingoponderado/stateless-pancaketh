@@ -80,31 +80,40 @@ docker build -t stateless-pancaketh-eest-spike .
 docker run --rm stateless-pancaketh-eest-spike
 ```
 
-A pre-built image bakes in `ziskemu`, the flapjack-compiled accelerated guest,
-and the full `tests-zkevm` EEST fixture
-corpus, so you can reproduce a conformance run with one `docker run` — no
-Lean, Rust, or RISC-V toolchain needed locally:
+A pre-built image of the same build bakes in Spike, the flapjack-compiled
+software guest (every precompile implemented in Pancake, no ZisK accelerator
+CSRs), and the full `tests-zkevm` EEST fixture corpus already converted to
+guest inputs. You can reproduce a conformance run with one `docker run`, with
+no Lean, Rust, or RISC-V toolchain needed locally:
 
 ```bash
-docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4
+docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.5
 ```
 
-`v0.1.4` was built from `main` at `414e6c6` (tag `r20261003-02`) with the
-`tests-zkevm@v21.0.1` fixtures. It predates restoration of the software guest;
-build this branch locally to use the software ELF.
+`v0.1.5` (index digest
+`sha256:41be958b282abc00f72325899615c443182bac04dc3ef15d7ef165a96d52fa71`) was
+built from `main` at `9a33655` (tag `docker/r20261103-01`) with the
+`tests-zkevm@v21.0.6` fixtures. It is the same image as
+`spike-software-9a33655`, retagged without a rebuild after a full-corpus run
+of that image passed (33,831 records: 33,821 `PASS(full)`, 10
+`PASS(malformed)`). Earlier tags (`v0.1.4` and before) carry the accelerated
+guest under `ziskemu` with older fixtures.
 
-This defaults to the accelerated guest against the full fixture corpus under
-`ziskemu`. Override the entrypoint's arguments to run something narrower:
+By default the image runs the software guest over the full fixture corpus
+under Spike, using one worker per CPU. Override the entrypoint's arguments to
+run something narrower:
 
 ```bash
-# Fewer parallel ziskemu jobs (each uses ~6.5-6.7 GB RSS; the entrypoint
-# auto-caps --jobs to available memory already, but you can go lower)
-docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4 \
-  guest/build/guest.elf work/inputs/manifest.tsv --ziskemu --quiet-passes --jobs 2
+# Fewer parallel Spike workers, and keep the per-record results JSON
+mkdir -p eest-results
+docker run --rm -v "$PWD/eest-results:/out" \
+  ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.5 \
+  guest/build/guest.elf work/inputs/manifest.tsv --quiet-passes \
+  --jobs 10 --json /out/results.json
 
 # Narrow subset for a quick smoke check
-docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.4 \
-  guest/build/guest.elf work/inputs/manifest.tsv --ziskemu --quiet-passes \
+docker run --rm ghcr.io/flamingoponderado/stateless-pancaketh:v0.1.5 \
+  guest/build/guest.elf work/inputs/manifest.tsv --quiet-passes \
   --filter random_statetest --limit 50
 ```
 
